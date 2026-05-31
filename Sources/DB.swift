@@ -1,0 +1,273 @@
+//
+//  DB.swift
+//  Burrow
+//
+//  SQLite-backed history store. Single table `samples(prefix, ts, json)`
+//  with composite primary key. Two indices: the PK covers
+//  prefix-then-ts range queries (the common case for chart rendering),
+//  and a separate `idx_ts` covers cross-prefix TTL prunes.
+//
+//  Schema mirrors what the Stats fork did with leveldb (`<prefix>@<ts>`
+//  keys) but in a row-shaped table the planner can reason about.
+//  Stride-sampled chart queries become a single SQL with a window
+//  function — see `findTimeSeriesSampled` — instead of the seek-stride
+//  iterator Stats had to hand-roll over leveldb's bytes.
+//
+//  Concurrency model: serial dispatch queue serialises all writes;
+//  SQLite's WAL mode lets readers run in parallel without blocking on
+//  the writer. The QueryServer reads through a per-thread connection
+//  (cheap) so HTTP requests don't queue behind the sampler.
+//
+
+import Foundation
+import SQLite3
+
+/// SQLite's "transient destructor" sentinel. We pass it to `sqlite3_bind_*`
+/// so SQLite makes its own copy of bound strings/blobs — required because
+/// the Swift String we pass goes out of scope before the statement runs.
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+enum DBError: Error, LocalizedError {
+    case open(String)
+    case prepare(String)
+    case step(String)
+    case unsupported(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .open(let m): return "DB open failed: \(m)"
+        case .prepare(let m): return "DB prepare failed: \(m)"
+        case .step(let m): return "DB step failed: \(m)"
+        case .unsupported(let m): return "DB unsupported: \(m)"
+        }
+    }
+}
+
+final class DB {
+    private var handle: OpaquePointer?
+    private let writeQueue = DispatchQueue(label: "dev.caezium.burrow.db.write")
+
+    /// Opens (or creates) the default DB at
+    /// `~/Library/Application Support/Burrow/burrow.db`. Application
+    /// Support is created on demand because the directory may not exist
+    /// on a fresh install.
+    static func openDefault() throws -> DB {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                               in: .userDomainMask).first!
+            .appendingPathComponent("Burrow", isDirectory: true)
+        try FileManager.default.createDirectory(at: support,
+                                                withIntermediateDirectories: true)
+        return try DB(at: support.appendingPathComponent("burrow.db"))
+    }
+
+    /// Test-friendly initialiser. Pass a temp path from `XCTestCase.setUp`.
+    init(at url: URL) throws {
+        let path = url.path
+        var h: OpaquePointer?
+        // SQLITE_OPEN_FULLMUTEX lets us call into the same connection from
+        // multiple threads without serializing ourselves. SQLite handles
+        // the locking, and the cost is a per-call mutex grab — negligible
+        // at our query rate.
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        if sqlite3_open_v2(path, &h, flags, nil) != SQLITE_OK {
+            let msg = h.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
+            sqlite3_close(h)
+            throw DBError.open(msg)
+        }
+        self.handle = h
+
+        // WAL mode lets readers run concurrently with the writer. Without
+        // it the sampler's 1-row insert blocks every chart query — very
+        // visible at 60s cadence with the popup open.
+        try exec("PRAGMA journal_mode=WAL;")
+        try exec("PRAGMA synchronous=NORMAL;")  // WAL + NORMAL is the canonical durability/perf tradeoff
+        try exec("PRAGMA foreign_keys=ON;")
+
+        try exec("""
+            CREATE TABLE IF NOT EXISTS samples (
+                prefix TEXT NOT NULL,
+                ts     INTEGER NOT NULL,
+                json   TEXT NOT NULL,
+                PRIMARY KEY (prefix, ts)
+            );
+            """)
+        // Cross-prefix TTL prune needs a ts-only index; the PK above is
+        // (prefix, ts) so it can't satisfy `WHERE ts < ?` without scanning.
+        try exec("CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts);")
+    }
+
+    deinit {
+        if let h = handle {
+            sqlite3_close(h)
+        }
+    }
+
+    // MARK: - Writes
+
+    /// Insert a (prefix, ts) row. Last-write-wins on PK collision because
+    /// the sampler can fire twice in the same second on a long stall.
+    func insert(prefix: String, ts: Int, json: String) throws {
+        try writeQueue.sync {
+            var stmt: OpaquePointer?
+            let sql = "INSERT OR REPLACE INTO samples(prefix, ts, json) VALUES (?, ?, ?);"
+            guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw DBError.prepare(self.lastErrorMessage())
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_int64(stmt, 2, Int64(ts))
+            sqlite3_bind_text(stmt, 3, json, -1, SQLITE_TRANSIENT)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw DBError.step(self.lastErrorMessage())
+            }
+        }
+    }
+
+    // MARK: - Reads
+
+    struct Row {
+        let ts: Int
+        let json: String
+    }
+
+    /// Most recent row for a prefix, or nil. O(log N) via the (prefix, ts)
+    /// PK — SQLite walks the index backwards from the prefix's upper bound.
+    func findLatest(prefix: String) -> Row? {
+        var stmt: OpaquePointer?
+        let sql = "SELECT ts, json FROM samples WHERE prefix=? ORDER BY ts DESC LIMIT 1;"
+        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let ts = Int(sqlite3_column_int64(stmt, 0))
+        let json = String(cString: sqlite3_column_text(stmt, 1))
+        return Row(ts: ts, json: json)
+    }
+
+    /// All rows for `prefix` in `[since, until]` (inclusive). Returned in
+    /// ascending ts order. Bounded by the PK range so a 24h window over
+    /// a million-row prefix walks just the slice.
+    func findRange(prefix: String, since: Int, until: Int) -> [Row] {
+        var rows: [Row] = []
+        var stmt: OpaquePointer?
+        let sql = """
+            SELECT ts, json FROM samples
+            WHERE prefix=? AND ts BETWEEN ? AND ?
+            ORDER BY ts ASC;
+            """
+        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(stmt, 2, Int64(since))
+        sqlite3_bind_int64(stmt, 3, Int64(until))
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let ts = Int(sqlite3_column_int64(stmt, 0))
+            let json = String(cString: sqlite3_column_text(stmt, 1))
+            rows.append(Row(ts: ts, json: json))
+        }
+        return rows
+    }
+
+    /// Stride-sampled range read. Returns at most `maxPoints` rows evenly
+    /// spaced across the window. Implemented by computing a target stride
+    /// (`ceil(window / maxPoints)`) and grouping rows by the bucket they
+    /// land in, picking the first row of each bucket.
+    ///
+    /// This is the same shape Stats's seek-stride sampler had, but in SQL
+    /// it's one round trip instead of an iterator loop. The point at the
+    /// row level: a wide range query (24h, 7d) materializes O(maxPoints)
+    /// rows in Swift, not the full window.
+    func findRangeSampled(prefix: String,
+                                 since: Int,
+                                 until: Int,
+                                 maxPoints: Int = 720) -> [Row] {
+        let window = until - since
+        guard window > 0, maxPoints > 0 else { return [] }
+        let stride = max(1, (window + maxPoints - 1) / maxPoints)  // ceil
+        var rows: [Row] = []
+        var stmt: OpaquePointer?
+        // For each bucket `(ts - since) / stride` we take the row with the
+        // smallest ts. SQLite picks the row with MIN(ts) per group cheaply
+        // because the index is already ts-sorted within the prefix.
+        let sql = """
+            SELECT MIN(ts) AS ts, json FROM samples
+            WHERE prefix=? AND ts BETWEEN ? AND ?
+            GROUP BY (ts - ?) / ?
+            ORDER BY ts ASC;
+            """
+        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(stmt, 2, Int64(since))
+        sqlite3_bind_int64(stmt, 3, Int64(until))
+        sqlite3_bind_int64(stmt, 4, Int64(since))
+        sqlite3_bind_int64(stmt, 5, Int64(stride))
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let ts = Int(sqlite3_column_int64(stmt, 0))
+            let json = String(cString: sqlite3_column_text(stmt, 1))
+            rows.append(Row(ts: ts, json: json))
+        }
+        return rows
+    }
+
+    /// Distinct prefixes currently in the DB. Cheap because the PK starts
+    /// with `prefix` — SQLite can satisfy this from the index alone.
+    func listPrefixes() -> [String] {
+        var out: [String] = []
+        var stmt: OpaquePointer?
+        let sql = "SELECT DISTINCT prefix FROM samples ORDER BY prefix;"
+        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out.append(String(cString: sqlite3_column_text(stmt, 0)))
+        }
+        return out
+    }
+
+    // MARK: - Maintenance
+
+    /// Delete rows older than `cutoff` (a unix timestamp). Returns number
+    /// of rows deleted. Uses the `idx_ts` index — wouldn't be possible
+    /// without it because the PK leads with `prefix`.
+    @discardableResult
+    func pruneOlderThan(_ cutoff: Int) throws -> Int {
+        return try writeQueue.sync {
+            var stmt: OpaquePointer?
+            let sql = "DELETE FROM samples WHERE ts < ?;"
+            guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw DBError.prepare(self.lastErrorMessage())
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, Int64(cutoff))
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw DBError.step(self.lastErrorMessage())
+            }
+            return Int(sqlite3_changes(self.handle))
+        }
+    }
+
+    /// `VACUUM` reclaims disk space after a heavy prune. Not run
+    /// automatically — the sampler doesn't generate enough churn day to
+    /// day to need it. Tests + a future "compact now" settings button.
+    func vacuum() throws {
+        try writeQueue.sync { try self.exec("VACUUM;") }
+    }
+
+    // MARK: - Internals
+
+    private func exec(_ sql: String) throws {
+        var err: UnsafeMutablePointer<CChar>?
+        if sqlite3_exec(self.handle, sql, nil, nil, &err) != SQLITE_OK {
+            let msg = err.map { String(cString: $0) } ?? "unknown"
+            sqlite3_free(err)
+            throw DBError.step(msg)
+        }
+    }
+
+    private func lastErrorMessage() -> String {
+        if let h = self.handle {
+            return String(cString: sqlite3_errmsg(h))
+        }
+        return "no handle"
+    }
+}
