@@ -47,26 +47,34 @@ final class Sampler {
     }
 
     func start() {
-        // One initial sample on launch so the popup has data immediately,
-        // then the periodic timer takes over. Both run on the sampler
-        // queue — no chance of two concurrent invocations of `mo`.
+        // Initial sample so the popup has data immediately; rest of the
+        // schedule is driven by `scheduleNext`, which re-reads
+        // `Store.sampleIntervalSeconds` every tick so a Settings change
+        // takes effect within one cycle without needing a sampler
+        // restart.
         self.queue.async { self.tick() }
-
-        let t = DispatchSource.makeTimerSource(queue: self.queue)
-        // Loose leeway: we don't care about sub-second jitter at a 60s
-        // cadence, and looser timing lets macOS coalesce wakeups with
-        // other timers (less energy use).
-        t.schedule(deadline: .now() + self.intervalSeconds,
-                   repeating: self.intervalSeconds,
-                   leeway: .seconds(5))
-        t.setEventHandler { [weak self] in self?.tick() }
-        t.resume()
-        self.timer = t
+        self.scheduleNext()
     }
 
     func stop() {
         self.timer?.cancel()
         self.timer = nil
+    }
+
+    /// One-shot timer that re-arms after each tick. This is what lets
+    /// the Sampler honor a Settings change at runtime without us
+    /// teaching it to observe UserDefaults — we just re-pull the value
+    /// at the moment we schedule the next fire.
+    private func scheduleNext() {
+        let interval = TimeInterval(Store.sampleIntervalSeconds)
+        let t = DispatchSource.makeTimerSource(queue: self.queue)
+        t.schedule(deadline: .now() + interval, repeating: .never, leeway: .seconds(2))
+        t.setEventHandler { [weak self] in
+            self?.tick()
+            self?.scheduleNext()
+        }
+        t.resume()
+        self.timer = t
     }
 
     /// Single sample iteration. Synchronous from the caller's perspective —

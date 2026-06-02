@@ -1,0 +1,353 @@
+//
+//  MCP.swift
+//  Burrow
+//
+//  Stdio MCP (Model Context Protocol) server. When Burrow is launched
+//  with `--mcp`, the GUI path is skipped and this loop takes over,
+//  reading JSON-RPC 2.0 messages from stdin and writing responses to
+//  stdout (line-delimited).
+//
+//  This isn't a long-lived service — Claude Code spawns the binary on
+//  demand and keeps it alive only while the conversation is live. Each
+//  spawn opens its own SQLite handle into the same `burrow.db` the GUI
+//  app writes to. SQLite WAL means the spawn can read concurrently
+//  with the GUI's sampler write loop.
+//
+//  Protocol surface implemented:
+//    * initialize → server info + capabilities
+//    * notifications/initialized → no-op (notification, no response)
+//    * tools/list → fixed set, see ToolCatalog
+//    * tools/call → dispatched to the catalog
+//
+//  All other methods return JSON-RPC error -32601 (method not found).
+//  Tool results are wrapped as `{content: [{type: "text", text: "..."}]}`
+//  per MCP convention — the text payload is the actual JSON we want
+//  the agent to read.
+//
+//  Wire it up in your Claude Code config (`~/.claude/settings.json`):
+//
+//      {
+//        "mcpServers": {
+//          "burrow": {
+//            "command": "/Applications/Burrow.app/Contents/MacOS/Burrow",
+//            "args": ["--mcp"]
+//          }
+//        }
+//      }
+//
+
+import Foundation
+
+enum MCP {
+    static func runStdioLoop() {
+        // Open the DB read-only-ish — the MCP shim never inserts, but
+        // SQLite needs RW to open in WAL mode. The GUI's sampler
+        // handles all writes; we just read.
+        let db: DB
+        do {
+            db = try DB.openDefault()
+        } catch {
+            stderr("burrow --mcp: failed to open DB: \(error.localizedDescription)")
+            exit(1)
+        }
+        let server = MCPServer(db: db)
+        server.serve(input: FileHandle.standardInput,
+                     output: FileHandle.standardOutput)
+    }
+
+    /// Diagnostic logging. Goes to stderr so it doesn't pollute the
+    /// JSON-RPC stream on stdout. Claude Code typically captures stderr
+    /// into its agent log file.
+    fileprivate static func stderr(_ s: String) {
+        FileHandle.standardError.write(Data((s + "\n").utf8))
+    }
+}
+
+// MARK: - Server
+
+final class MCPServer {
+    private let db: DB
+    private let dec = JSONDecoder()
+    private let enc = JSONEncoder()
+    private let catalog: ToolCatalog
+
+    init(db: DB) {
+        self.db = db
+        self.catalog = ToolCatalog(db: db)
+        self.enc.outputFormatting = [.withoutEscapingSlashes]
+    }
+
+    /// Drive the loop. Reads line by line from `input`; one JSON-RPC
+    /// message per line is the de-facto standard for stdio MCP. Exits
+    /// cleanly on EOF.
+    func serve(input: FileHandle, output: FileHandle) {
+        var buffer = Data()
+        while true {
+            let chunk = input.availableData
+            if chunk.isEmpty { break }   // EOF — peer closed
+            buffer.append(chunk)
+            while let nl = buffer.firstIndex(of: 0x0A) {
+                let line = buffer.subdata(in: buffer.startIndex..<nl)
+                buffer.removeSubrange(buffer.startIndex...nl)
+                if line.isEmpty { continue }
+                self.handleLine(line, output: output)
+            }
+        }
+    }
+
+    private func handleLine(_ data: Data, output: FileHandle) {
+        // Decode the JSON-RPC envelope loosely — we only care about
+        // jsonrpc/id/method/params. Use a flexible decode so we can
+        // tell notifications (no id) from requests (with id).
+        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            self.write(output, MCPServer.errorResponse(id: nil, code: -32700,
+                                                      message: "parse error"))
+            return
+        }
+        let method = (raw["method"] as? String) ?? ""
+        let id = raw["id"]   // may be nil for notifications
+
+        switch method {
+        case "initialize":
+            self.write(output, self.initializeResponse(id: id))
+        case "notifications/initialized":
+            // Notification — no response. The client is just telling us
+            // it processed our initialize response.
+            return
+        case "tools/list":
+            self.write(output, self.toolsListResponse(id: id))
+        case "tools/call":
+            self.handleToolsCall(raw: raw, id: id, output: output)
+        default:
+            // Notifications have no id; don't reply with an error to
+            // them, that would be malformed JSON-RPC.
+            if id != nil {
+                self.write(output, MCPServer.errorResponse(id: id, code: -32601,
+                                                          message: "method not found: \(method)"))
+            }
+        }
+    }
+
+    // MARK: - Method handlers
+
+    private func initializeResponse(id: Any?) -> [String: Any] {
+        return [
+            "jsonrpc": "2.0",
+            "id": id as Any,
+            "result": [
+                "protocolVersion": "2024-11-05",
+                "capabilities": ["tools": [String: Any]()],
+                "serverInfo": [
+                    "name": "burrow",
+                    "version": "0.2.0",
+                ],
+            ],
+        ]
+    }
+
+    private func toolsListResponse(id: Any?) -> [String: Any] {
+        return [
+            "jsonrpc": "2.0",
+            "id": id as Any,
+            "result": ["tools": self.catalog.descriptors()],
+        ]
+    }
+
+    private func handleToolsCall(raw: [String: Any], id: Any?, output: FileHandle) {
+        let params = raw["params"] as? [String: Any] ?? [:]
+        let name = params["name"] as? String ?? ""
+        let args = params["arguments"] as? [String: Any] ?? [:]
+
+        do {
+            let resultText = try self.catalog.call(name: name, arguments: args)
+            self.write(output, [
+                "jsonrpc": "2.0",
+                "id": id as Any,
+                "result": [
+                    "content": [
+                        ["type": "text", "text": resultText],
+                    ],
+                ],
+            ])
+        } catch let MCPToolError.unknown(toolName) {
+            self.write(output, MCPServer.errorResponse(id: id, code: -32602,
+                                                      message: "unknown tool: \(toolName)"))
+        } catch let MCPToolError.badArguments(reason) {
+            self.write(output, MCPServer.errorResponse(id: id, code: -32602,
+                                                      message: "bad arguments: \(reason)"))
+        } catch {
+            self.write(output, MCPServer.errorResponse(id: id, code: -32603,
+                                                      message: "internal error: \(error.localizedDescription)"))
+        }
+    }
+
+    // MARK: - Plumbing
+
+    private func write(_ fh: FileHandle, _ object: [String: Any]) {
+        guard var data = try? JSONSerialization.data(withJSONObject: object,
+                                                     options: [.withoutEscapingSlashes]) else {
+            return
+        }
+        data.append(0x0A)
+        try? fh.write(contentsOf: data)
+    }
+
+    static func errorResponse(id: Any?, code: Int, message: String) -> [String: Any] {
+        return [
+            "jsonrpc": "2.0",
+            "id": id as Any,
+            "error": ["code": code, "message": message],
+        ]
+    }
+}
+
+// MARK: - Tool catalog
+
+enum MCPToolError: Error {
+    case unknown(String)
+    case badArguments(String)
+}
+
+/// Burrow's MCP tools. Each one is a thin wrapper around a DB query
+/// that returns a JSON string — agents read the text and parse it.
+struct ToolCatalog {
+    let db: DB
+
+    /// Tool descriptors for `tools/list`. The inputSchema mirrors the
+    /// JSON-Schema subset MCP expects; we keep them minimal.
+    func descriptors() -> [[String: Any]] {
+        return [
+            [
+                "name": "burrow_snapshot",
+                "description": "Most recent Mole status snapshot (CPU, memory, disk, network, thermal, top processes, system health). Returns the full JSON Mole produced.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [String: Any](),
+                    "additionalProperties": false,
+                ] as [String: Any],
+            ],
+            [
+                "name": "burrow_history",
+                "description": "Time-series slice of Mole snapshots. `minutes` selects how far back to look (default 60). `samples` caps the number of returned points via stride sampling (default 60, max 720).",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "minutes": ["type": "integer", "minimum": 1],
+                        "samples": ["type": "integer", "minimum": 1, "maximum": 720],
+                    ],
+                    "additionalProperties": false,
+                ] as [String: Any],
+            ],
+            [
+                "name": "burrow_top_processes",
+                "description": "Top processes (by peak CPU%) across the last `minutes` window (default 60). Aggregates Mole's per-tick top_processes lists.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "minutes": ["type": "integer", "minimum": 1],
+                        "limit": ["type": "integer", "minimum": 1, "maximum": 100],
+                    ],
+                    "additionalProperties": false,
+                ] as [String: Any],
+            ],
+            [
+                "name": "burrow_info",
+                "description": "Burrow's own state: list of prefixes with row counts + staleness, current retention setting. Use when diagnosing whether data is flowing.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [String: Any](),
+                    "additionalProperties": false,
+                ] as [String: Any],
+            ],
+        ]
+    }
+
+    func call(name: String, arguments: [String: Any]) throws -> String {
+        switch name {
+        case "burrow_snapshot":
+            return self.callSnapshot()
+        case "burrow_history":
+            return try self.callHistory(arguments)
+        case "burrow_top_processes":
+            return try self.callTopProcesses(arguments)
+        case "burrow_info":
+            return self.callInfo()
+        default:
+            throw MCPToolError.unknown(name)
+        }
+    }
+
+    // MARK: Tool implementations
+
+    private func callSnapshot() -> String {
+        guard let row = self.db.findLatest(prefix: Sampler.snapshotPrefix) else {
+            return "{\"error\":\"no snapshot yet\"}"
+        }
+        return "{\"ts\":\(row.ts),\"snapshot\":\(row.json)}"
+    }
+
+    private func callHistory(_ args: [String: Any]) throws -> String {
+        let minutes = (args["minutes"] as? Int) ?? 60
+        let samples = max(1, min((args["samples"] as? Int) ?? 60, 720))
+        guard minutes > 0 else { throw MCPToolError.badArguments("minutes must be positive") }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let since = now - minutes * 60
+        let rows = self.db.findRangeSampled(prefix: Sampler.snapshotPrefix,
+                                            since: since, until: now,
+                                            maxPoints: samples)
+        var pieces: [String] = []
+        pieces.reserveCapacity(rows.count)
+        for r in rows {
+            pieces.append("{\"ts\":\(r.ts),\"snapshot\":\(r.json)}")
+        }
+        return "{\"count\":\(rows.count),\"rows\":[\(pieces.joined(separator: ","))]}"
+    }
+
+    private func callTopProcesses(_ args: [String: Any]) throws -> String {
+        let minutes = (args["minutes"] as? Int) ?? 60
+        let limit = max(1, min((args["limit"] as? Int) ?? 10, 100))
+        guard minutes > 0 else { throw MCPToolError.badArguments("minutes must be positive") }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let since = now - minutes * 60
+        // 720 sampled rows over the window is the same budget the
+        // HistoryView uses — enough to catch any process that peaked.
+        let rows = self.db.findRangeSampled(prefix: Sampler.snapshotPrefix,
+                                            since: since, until: now,
+                                            maxPoints: 720)
+        var peakCPU: [String: Double] = [:]
+        var peakMem: [String: Double] = [:]
+        let dec = JSONDecoder()
+        for r in rows {
+            guard let data = r.json.data(using: .utf8) else { continue }
+            guard let s = try? dec.decode(MoleStatus.self, from: data) else { continue }
+            for p in (s.topProcesses ?? []) {
+                if p.cpu > (peakCPU[p.name] ?? 0)    { peakCPU[p.name] = p.cpu }
+                if p.memory > (peakMem[p.name] ?? 0) { peakMem[p.name] = p.memory }
+            }
+        }
+        let top = peakCPU.sorted { $0.value > $1.value }.prefix(limit)
+        var pieces: [String] = []
+        for (name, cpu) in top {
+            let escaped = name.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+            pieces.append("{\"name\":\"\(escaped)\",\"peak_cpu\":\(cpu),\"peak_mem\":\(peakMem[name] ?? 0)}")
+        }
+        return "{\"window_minutes\":\(minutes),\"processes\":[\(pieces.joined(separator: ","))]}"
+    }
+
+    private func callInfo() -> String {
+        let now = Int(Date().timeIntervalSince1970)
+        let prefixes = self.db.listPrefixes()
+        var pieces: [String] = []
+        for p in prefixes {
+            if let row = self.db.findLatest(prefix: p) {
+                pieces.append("{\"prefix\":\"\(p)\",\"latest_ts\":\(row.ts),\"age_seconds\":\(max(0, now - row.ts))}")
+            } else {
+                pieces.append("{\"prefix\":\"\(p)\",\"latest_ts\":null,\"age_seconds\":null}")
+            }
+        }
+        return "{\"now\":\(now),\"retention_days\":\(Store.retentionDays),\"sample_interval_seconds\":\(Store.sampleIntervalSeconds),\"readers\":[\(pieces.joined(separator: ","))]}"
+    }
+}

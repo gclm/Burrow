@@ -2,23 +2,24 @@
 //  PopupView.swift
 //  Burrow
 //
-//  Menu-bar popover contents. Reads the latest snapshot from the
-//  Sampler (in-memory mirror of the most recent successful sample);
-//  redraws every second so the freshness timer stays current.
+//  Menu-bar popover. Reads the latest snapshot from the Sampler's
+//  in-memory mirror (no DB hit per redraw) and refreshes every second
+//  so the freshness label stays current. Bottom row has buttons that
+//  open the History / Cleanup / Settings windows via AppDelegate.
 //
-//  This is intentionally minimal for v0.1 — the goal is "see at a
-//  glance whether Burrow is collecting" plus a single-screen summary
-//  of the things Mole reports. The full History view + cleanup UI
-//  come in later commits.
+//  Intentionally compact: one screen, one summary, one row of actions.
+//  Deeper UI lives in the dedicated windows.
 //
 
 import SwiftUI
 
 struct PopupView: View {
     @ObservedObject private var model: PopupModel
+    private weak var delegate: AppDelegate?
 
-    init(sampler: Sampler) {
+    init(sampler: Sampler, delegate: AppDelegate) {
         self.model = PopupModel(sampler: sampler)
+        self.delegate = delegate
     }
 
     var body: some View {
@@ -31,11 +32,13 @@ struct PopupView: View {
                 ContentUnavailableView(
                     "Waiting for first sample",
                     systemImage: "antenna.radiowaves.left.and.right.slash",
-                    description: Text("Burrow runs `mo status --json` every 60 s. The first row appears within a minute of launch.")
+                    description: Text("Burrow runs `mo status --json` at the configured cadence. The first row appears within one tick of launch.")
                 )
                 .frame(maxWidth: .infinity, alignment: .center)
             }
 
+            Divider()
+            actionRow
             Divider()
             footer
         }
@@ -48,7 +51,7 @@ struct PopupView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "house.lodge.fill").foregroundStyle(.tint)
+            Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.tint)
             Text("Burrow").font(.headline)
             Spacer()
             Text(model.freshnessLabel)
@@ -91,9 +94,35 @@ struct PopupView: View {
         }
     }
 
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            actionButton(title: "History", symbol: "chart.bar.xaxis") {
+                self.delegate?.openHistory()
+            }
+            actionButton(title: "Cleanup", symbol: "trash") {
+                self.delegate?.openCleanup()
+            }
+            actionButton(title: "Settings", symbol: "gear") {
+                self.delegate?.openSettings()
+            }
+        }
+    }
+
+    private func actionButton(title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: symbol)
+                Text(title).font(.caption)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.bordered)
+    }
+
     private var footer: some View {
         HStack {
-            Text("MCP @ 127.0.0.1:\(QueryServer.defaultPort)")
+            Text("MCP @ 127.0.0.1:\(Store.queryServerPort)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -108,9 +137,6 @@ struct PopupView: View {
 
 // MARK: - Tick driver
 
-/// Drives a 1 Hz redraw of the popup. `ObservedObject` so SwiftUI
-/// re-runs `body` when `snapshot` or `freshnessLabel` change. Lives as
-/// long as the popover's `NSHostingController`.
 private final class PopupModel: ObservableObject {
     @Published var snapshot: MoleStatus?
     @Published var freshnessLabel: String = "—"

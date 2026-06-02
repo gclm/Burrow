@@ -2,14 +2,15 @@
 //  StatusBarController.swift
 //  Burrow
 //
-//  Owns the NSStatusItem and the popover that opens from it. The
-//  popover is created lazily on first click (cheaper launch path) and
-//  reused — its contentViewController holds the SwiftUI `PopupView`,
-//  bound to the Sampler so it can read the latest snapshot directly
-//  rather than going through the DB.
+//  Owns the NSStatusItem and its popover. The popover is created
+//  lazily on first click and reused; its NSHostingController holds
+//  the SwiftUI `PopupView` bound to the Sampler (for live snapshot
+//  data) and the AppDelegate (for the History / Cleanup / Settings
+//  buttons that open windows).
 //
-//  The icon is a simple SF Symbol for v0.1. A custom asset can replace
-//  it later — the controller doesn't care.
+//  Icon: `chart.line.uptrend.xyaxis`. Reads as "this thing tracks
+//  something over time" — semantically aligned with what Burrow does.
+//  Template image so it adapts to light/dark menu bars.
 //
 
 import AppKit
@@ -21,28 +22,28 @@ final class StatusBarController {
     private let db: DB
     private let sampler: Sampler
 
-    init(db: DB, sampler: Sampler) {
+    init(db: DB, sampler: Sampler, delegate: AppDelegate) {
         self.db = db
         self.sampler = sampler
         self.item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        // Build the popover before we touch `self` from the button-target
-        // assignment below: Swift requires every `let` stored property to
-        // be initialized before any method (including the @objc target
-        // path) can reference `self`.
+        // Build the popover before the button-target line below so all
+        // `let` properties are initialized when `self` first leaks via
+        // the @objc selector dispatch.
         let popover = NSPopover()
-        popover.behavior = .transient   // closes on outside click
-        popover.contentSize = NSSize(width: 320, height: 220)
+        popover.behavior = .transient
+        popover.contentSize = NSSize(width: 320, height: 320)
         popover.contentViewController = NSHostingController(
-            rootView: PopupView(sampler: sampler))
+            rootView: PopupView(sampler: sampler, delegate: delegate))
         self.popover = popover
 
         if let button = self.item.button {
-            // Burrow's icon for v0.1. Picked for semantic fit ("burrow" / "den")
-            // — a future custom asset will replace it.
-            button.image = NSImage(systemSymbolName: "house.lodge.fill",
+            // Burrow's menu-bar glyph. The "trend" chart icon mirrors
+            // the app's purpose (history-over-time) better than the
+            // earlier house-lodge placeholder.
+            button.image = NSImage(systemSymbolName: "chart.line.uptrend.xyaxis",
                                    accessibilityDescription: "Burrow")
-            button.image?.isTemplate = true  // adapts to light/dark menu bar
+            button.image?.isTemplate = true
             button.action = #selector(self.handleClick(_:))
             button.target = self
         }
@@ -56,9 +57,8 @@ final class StatusBarController {
             self.popover.show(relativeTo: button.bounds,
                               of: button,
                               preferredEdge: .minY)
-            // Bring the app forward so the popover gets keyboard focus —
-            // without this, opening from a background app puts the
-            // popover up but key events go elsewhere.
+            // Pull focus so the popover's keyboard shortcuts (⌘Q etc.)
+            // are reachable without a second click.
             NSApp.activate(ignoringOtherApps: true)
         }
     }
