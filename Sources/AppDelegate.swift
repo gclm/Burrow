@@ -2,35 +2,30 @@
 //  AppDelegate.swift
 //  Burrow
 //
-//  Wires the menu-bar item, kicks off the Mole sampler, starts the MCP
-//  query server, runs hourly maintenance, and manages the History /
-//  Cleanup / Settings windows.
-//
 //  Launch order (matters):
 //
 //    1. Verify `mo` is on PATH. Hard requirement — if missing, modal
 //       alert with the install command, then quit.
-//    2. Open the SQLite history DB at
-//       `~/Library/Application Support/Burrow/burrow.db`.
-//    3. Start QueryServer on 127.0.0.1:9277 (Store-controlled).
-//    4. Start Sampler — spawns `mo status --json` at Store-configured
-//       cadence.
-//    5. Start Maintenance — hourly prune by retention.
+//    2. Open the SQLite history DB.
+//    3. Start QueryServer (Store-gated).
+//    4. Start Sampler (Store-configured cadence).
+//    5. Start Maintenance (hourly prune).
 //    6. Install the NSStatusItem.
 //
-//  Windows (history, cleanup, settings) are opened on demand from the
-//  popover. Each has a single shared NSWindowController kept here so
-//  reopening focuses the existing window instead of stacking.
+//  Windows: v0.3 collapsed the four separate windows (History,
+//  DiskMap, Cleanup, Settings) into one main window with a sidebar.
+//  `openMainWindow(initial:)` is the one entry point — the popover's
+//  action buttons just deep-link by passing the section they want
+//  selected.
 //
 
 import Cocoa
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Singleton handle so SwiftUI views (and the menu-bar popover)
-    /// can reach the live Maintenance / Sampler / DB instances without
-    /// passing them through every initializer. There is exactly one
-    /// AppDelegate per app run; this is safe.
+    /// Singleton handle so SwiftUI views can reach the live
+    /// Maintenance / Sampler / DB without threading them through every
+    /// initializer.
     static private(set) var shared: AppDelegate?
 
     private(set) var db: DB?
@@ -39,23 +34,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var queryServer: QueryServer?
     private var statusBar: StatusBarController?
 
-    // Window controllers — one per kind, kept so reopen focuses.
-    private var historyWC: NSWindowController?
-    private var cleanupWC: NSWindowController?
-    private var settingsWC: NSWindowController?
-    private var diskMapWC: NSWindowController?
+    /// Single main window. Holds the sidebar + content router. The
+    /// `pendingInitialSection` is only used to pass the chosen tab
+    /// across the window-creation boundary; cleared once the window's
+    /// content view reads it.
+    private var mainWC: NSWindowController?
+    fileprivate var pendingInitialSection: BurrowSection = .overview
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
 
-        // 1. Hard requirement.
         guard MoleCLI.findExecutable() != nil else {
             MoleCLI.showMissingAlert()
             NSApp.terminate(nil)
             return
         }
 
-        // 2. DB.
         let db: DB
         do {
             db = try DB.openDefault()
@@ -70,25 +64,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.db = db
 
-        // 3. QueryServer (Store-gated).
         if Store.queryServerEnabled {
             let port = UInt16(clamping: Store.queryServerPort)
             self.queryServer = QueryServer(db: db, port: port)
             self.queryServer?.start()
         }
 
-        // 4. Sampler.
         let sampler = Sampler(db: db,
                               intervalSeconds: TimeInterval(Store.sampleIntervalSeconds))
         self.sampler = sampler
         sampler.start()
 
-        // 5. Maintenance.
         let maintenance = Maintenance(db: db)
         self.maintenance = maintenance
         maintenance.start()
 
-        // 6. Status bar.
         self.statusBar = StatusBarController(db: db, sampler: sampler, delegate: self)
     }
 
@@ -98,101 +88,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.maintenance?.stop()
     }
 
-    // MARK: - Window openers
+    // MARK: - Window
 
-    /// Called by the popover. Each opener focuses an existing window
-    /// if one is up, or builds a new one. The window controllers are
-    /// retained on the delegate so they survive between opens.
-    func openHistory() {
-        if let wc = self.historyWC {
-            wc.window?.makeKeyAndOrderFront(nil)
+    /// Open the main window, focusing the requested section. If the
+    /// window already exists, just selects the section and brings the
+    /// window forward. Used by every popover action button —
+    /// `openMainWindow(initial: .cleanup)` etc.
+    @available(macOS 14.0, *)
+    func openMainWindow(initial: BurrowSection = .overview) {
+        // If already open, route through the existing controller +
+        // root view's selection binding.
+        if let wc = self.mainWC, let window = wc.window {
+            self.pendingInitialSection = initial
+            // Tear down + rebuild content so the .task on MainView
+            // sees the new initial section. Cheap — just rebuilds
+            // SwiftUI hierarchy.
+            self.installMainContent(into: window, initial: initial)
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        guard let db = self.db else { return }
+
+        guard let db = self.db, let sampler = self.sampler else { return }
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 660),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 720),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = "Burrow History"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.toolbarStyle = .unified
+        window.title = "Burrow"
         window.center()
-        window.isReleasedWhenClosed = false  // we manage lifetime via WC retain
-        window.contentViewController = NSHostingController(rootView: HistoryView(db: db))
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 900, height: 580)
+        _ = (db, sampler)  // capture only via installMainContent below
 
         let wc = NSWindowController(window: window)
-        self.historyWC = wc
+        self.mainWC = wc
+        self.installMainContent(into: window, initial: initial)
         wc.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func openCleanup() {
-        if let wc = self.cleanupWC {
-            wc.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = "Burrow Cleanup"
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: CleanupView())
-
-        let wc = NSWindowController(window: window)
-        self.cleanupWC = wc
-        wc.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func openDiskMap() {
-        if let wc = self.diskMapWC {
-            wc.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 960, height: 720),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = "Burrow Disk Map"
-        window.center()
-        window.isReleasedWhenClosed = false
-        // Treemap defaults to the user's home directory; the picker
-        // inside the view lets them switch.
-        window.contentViewController = NSHostingController(rootView: DiskMapView())
-
-        let wc = NSWindowController(window: window)
-        self.diskMapWC = wc
-        wc.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func openSettings() {
-        if let wc = self.settingsWC {
-            wc.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = "Burrow Settings"
-        window.center()
-        window.isReleasedWhenClosed = false
-        // SettingsView ties "Run maintenance now" to the live
-        // Maintenance instance via this closure — no need to teach the
-        // view about AppDelegate.shared.
-        let view = SettingsView(onRunMaintenance: { [weak self] in
-            self?.maintenance?.runNow()
-        })
-        window.contentViewController = NSHostingController(rootView: view)
-
-        let wc = NSWindowController(window: window)
-        self.settingsWC = wc
-        wc.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    @available(macOS 14.0, *)
+    private func installMainContent(into window: NSWindow, initial: BurrowSection) {
+        guard let db = self.db, let sampler = self.sampler else { return }
+        let root = MainView(db: db, sampler: sampler, delegate: self,
+                            initialSelection: initial)
+        window.contentViewController = NSHostingController(rootView: root)
     }
 }

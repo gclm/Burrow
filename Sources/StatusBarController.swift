@@ -32,7 +32,12 @@ final class StatusBarController {
         // the @objc selector dispatch.
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 320, height: 320)
+        // SwiftUI's NSHostingController auto-sizes the popover to the
+        // root view's intrinsic size, but the initial size hint
+        // matters during the first-render measurement pass. The new
+        // popover has a status block + actions + 4 deep-link buttons
+        // — roughly 360 px tall, less if there's no sample yet.
+        popover.contentSize = NSSize(width: 320, height: 380)
         popover.contentViewController = NSHostingController(
             rootView: PopupView(sampler: sampler, delegate: delegate))
         self.popover = popover
