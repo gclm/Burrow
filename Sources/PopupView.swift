@@ -2,13 +2,18 @@
 //  PopupView.swift
 //  Burrow
 //
-//  Menu-bar popover. Reads the latest snapshot from the Sampler's
-//  in-memory mirror (no DB hit per redraw) and refreshes every second
-//  so the freshness label stays current. Bottom row has buttons that
-//  open the History / Cleanup / Settings windows via AppDelegate.
+//  Menu-bar popover. Replaced in v0.3 — used to be the *primary*
+//  surface (the only place you'd ever see current values) but the
+//  Overview tab inside the main window now does that job at full
+//  fidelity. The popover's job is now narrower:
 //
-//  Intentionally compact: one screen, one summary, one row of actions.
-//  Deeper UI lives in the dedicated windows.
+//    * Tell you instantly whether Burrow is collecting (freshness
+//      label, four-metric compact readout).
+//    * One click into the main window, pre-selecting the section you
+//      probably wanted.
+//
+//  No sparklines here — they'd compete with the dashboard inside the
+//  main window. Quick glance, dive in.
 //
 
 import SwiftUI
@@ -23,108 +28,143 @@ struct PopupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             header
-
+            Divider()
             if let snap = model.snapshot {
                 summary(snap)
             } else {
-                ContentUnavailableView(
-                    "Waiting for first sample",
-                    systemImage: "antenna.radiowaves.left.and.right.slash",
-                    description: Text("Burrow runs `mo status --json` at the configured cadence. The first row appears within one tick of launch.")
-                )
-                .frame(maxWidth: .infinity, alignment: .center)
+                waitingState
             }
-
             Divider()
-            actionRow
-            Divider()
+            actions
             footer
         }
-        .padding(16)
+        .padding(Theme.Spacing.md)
         .frame(width: 320)
-        .onReceive(model.tickPublisher) { _ in model.refresh() }
+        .onReceive(model.tick) { _ in model.refresh() }
     }
 
-    // MARK: - Sections
+    // MARK: - Slices
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.tint)
-            Text("Burrow").font(.headline)
+        HStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .foregroundStyle(Theme.Colour.accent)
+            Text("Burrow").font(Theme.Font.cardTitle)
             Spacer()
             Text(model.freshnessLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Colour.textSecondary)
                 .monospacedDigit()
         }
     }
 
+    private var waitingState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(spacing: Theme.Spacing.xs) {
+                ProgressView().controlSize(.small)
+                Text("Waiting for first sample…").font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Colour.textSecondary)
+            }
+            Text("Burrow spawns `mo status --json` at the configured cadence. The first row appears within one tick of launch.")
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Colour.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func summary(_ s: MoleStatus) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            row(label: "CPU",
+        VStack(spacing: Theme.Spacing.xs) {
+            row(symbol: "cpu",
+                tint: Theme.Colour.cpu,
+                label: "CPU",
                 value: String(format: "%.1f %%", s.cpu.usage),
-                detail: "load \(String(format: "%.2f", s.cpu.load1))")
-            row(label: "Memory",
+                detail: String(format: "load %.2f", s.cpu.load1))
+            row(symbol: "memorychip",
+                tint: Theme.Colour.memory,
+                label: "Memory",
                 value: String(format: "%.1f %%", s.memory.usedPercent),
                 detail: s.memory.pressure)
-            row(label: "Disk",
-                value: String(format: "R %.1f / W %.1f MB/s",
-                              s.diskIO.readRate, s.diskIO.writeRate),
-                detail: nil)
-            if let thermal = s.thermal, thermal.cpuTemp > 0 {
-                row(label: "Temp",
-                    value: String(format: "%.0f °C", thermal.cpuTemp),
-                    detail: thermal.fanSpeed > 0 ? "fan \(thermal.fanSpeed)" : nil)
-            }
-            row(label: "Health",
+            row(symbol: "internaldrive",
+                tint: Theme.Colour.disk,
+                label: "Disk",
+                value: String(format: "%.1f MB/s", s.diskIO.readRate + s.diskIO.writeRate),
+                detail: "r+w")
+            row(symbol: "heart.text.square",
+                tint: Theme.Colour.health,
+                label: "Health",
                 value: "\(s.healthScore)",
                 detail: s.healthScoreMsg.isEmpty ? nil : s.healthScoreMsg)
         }
-        .font(.system(size: 12, design: .monospaced))
     }
 
-    private func row(label: String, value: String, detail: String?) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary).frame(width: 60, alignment: .leading)
+    private func row(symbol: String, tint: Color, label: String,
+                     value: String, detail: String?) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
+                .frame(width: 16, alignment: .center)
+            Text(label)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Colour.textSecondary)
+                .frame(width: 64, alignment: .leading)
             Text(value)
+                .font(Theme.Font.mono)
+                .foregroundStyle(Theme.Colour.textPrimary)
             Spacer()
-            if let d = detail { Text(d).foregroundStyle(.tertiary) }
-        }
-    }
-
-    private var actionRow: some View {
-        // Four-up in one row would crowd at 320 px; split into two rows
-        // so each button keeps a comfortable hit target.
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                actionButton(title: "History", symbol: "chart.bar.xaxis") {
-                    self.delegate?.openHistory()
-                }
-                actionButton(title: "Disk Map", symbol: "square.grid.3x3.fill") {
-                    self.delegate?.openDiskMap()
-                }
-            }
-            HStack(spacing: 8) {
-                actionButton(title: "Cleanup", symbol: "trash") {
-                    self.delegate?.openCleanup()
-                }
-                actionButton(title: "Settings", symbol: "gear") {
-                    self.delegate?.openSettings()
-                }
+            if let d = detail {
+                Text(d)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Colour.textTertiary)
+                    .lineLimit(1)
             }
         }
     }
 
-    private func actionButton(title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol)
-                Text(title).font(.caption)
+    private var actions: some View {
+        // Primary action sits alone for emphasis; the four deep-link
+        // buttons below let advanced users jump straight to a tab.
+        VStack(spacing: Theme.Spacing.xs) {
+            Button {
+                if #available(macOS 14, *) {
+                    self.delegate?.openMainWindow(initial: .overview)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "rectangle.expand.vertical")
+                    Text("Open Burrow")
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .imageScale(.small)
+                        .foregroundStyle(Theme.Colour.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.return)
+
+            HStack(spacing: Theme.Spacing.xs) {
+                deepLink(title: "History",  symbol: "chart.line.uptrend.xyaxis", section: .history)
+                deepLink(title: "Disk Map", symbol: "square.grid.3x3.fill",        section: .diskMap)
+                deepLink(title: "Cleanup",  symbol: "trash",                         section: .cleanup)
+                deepLink(title: "Settings", symbol: "gearshape",                     section: .settings)
+            }
+        }
+    }
+
+    @available(macOS 14.0, *)
+    private func deepLink(title: String, symbol: String, section: BurrowSection) -> some View {
+        Button {
+            self.delegate?.openMainWindow(initial: section)
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: symbol).imageScale(.small)
+                Text(title).font(Theme.Font.caption)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
         }
         .buttonStyle(.bordered)
     }
@@ -132,9 +172,8 @@ struct PopupView: View {
     private var footer: some View {
         HStack {
             Text("MCP @ 127.0.0.1:\(Store.queryServerPort)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Colour.textTertiary)
             Spacer()
             Button("Quit", action: { NSApp.terminate(nil) })
                 .keyboardShortcut("q", modifiers: .command)
@@ -150,7 +189,7 @@ private final class PopupModel: ObservableObject {
     @Published var snapshot: MoleStatus?
     @Published var freshnessLabel: String = "—"
 
-    let tickPublisher = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let sampler: Sampler
 
@@ -163,7 +202,7 @@ private final class PopupModel: ObservableObject {
         self.snapshot = self.sampler.lastSnapshot
         if let last = self.sampler.lastSampleAt {
             let elapsed = Int(Date().timeIntervalSince(last))
-            self.freshnessLabel = "\(elapsed)s ago"
+            self.freshnessLabel = "\(elapsed) s ago"
         } else {
             self.freshnessLabel = "—"
         }
