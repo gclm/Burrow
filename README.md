@@ -20,8 +20,24 @@ Code can ask "what's been happening on this Mac."
 
 ## Screenshots
 
-See [`docs/screenshots`](docs/screenshots). _(Drop clean captures of each
-tab there — Status, Analyze, Software, Clean, Optimize, the menu-bar HUD.)_
+<table>
+  <tr>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/1b0c402e-430c-4a15-ba90-195a050bf29a"></td>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/2b523363-cdc3-4a04-b858-67066fc95df4"></td>
+  </tr>
+  <tr>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/fda0b2e3-8bbd-42fe-b53c-12e18cdf5cf7"></td>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/0e59ba40-9bca-4483-8980-f03afcfad340"></td>
+  </tr>
+  <tr>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/5194a214-4d2c-4a6a-ad92-c22046e5005f"></td>
+    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/40cc40cb-73ba-486a-ba15-356c032e6e04"></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img width="320" alt="Menu-bar HUD" src="https://github.com/user-attachments/assets/515c2c8f-0332-4e8b-b880-2f2369ccb544">
+</p>
 
 ## The five tools
 
