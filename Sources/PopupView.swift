@@ -32,7 +32,6 @@ struct PopupView: View {
         // the box and the arrow, so they match.
         VStack(alignment: .leading, spacing: 9) {
             header
-            if ops.hasActivity { activitySection }
             if let s = model.snap {
                 healthHero(s)
                 metricGrid(s)
@@ -58,8 +57,17 @@ struct PopupView: View {
         HStack(spacing: 7) {
             BurrowMark().frame(width: 18, height: 18)
             Text("Burrow").font(Brand.sans(13, .semibold)).foregroundStyle(Brand.textPrimary)
-            Spacer()
-            Text(model.freshness).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
+            Spacer(minLength: 6)
+            // Activity lives in the header so running jobs add no height.
+            if let op = ops.ops.first {
+                opIcon(op.phase)
+                Text(op.label).font(Brand.mono(9, .medium)).foregroundStyle(Brand.textSecondary).lineLimit(1)
+                if ops.ops.count > 1 {
+                    Text("+\(ops.ops.count - 1)").font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+                }
+            } else {
+                Text(model.freshness).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
+            }
         }
     }
 
@@ -73,32 +81,7 @@ struct PopupView: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: Activity (operations started in the window)
-
-    /// One fixed-height line (not a growing stack of cards) so running
-    /// jobs can't push the dropdown off the bottom of the screen. Shows
-    /// the most recent op; "+N" if there are others.
-    @ViewBuilder
-    private var activitySection: some View {
-        if let op = ops.ops.first {
-            HStack(spacing: 7) {
-                opIcon(op.phase)
-                Text(op.label).font(Brand.sans(11, .medium)).foregroundStyle(Brand.textPrimary)
-                    .lineLimit(1).layoutPriority(1)
-                if !op.detail.isEmpty {
-                    Text(op.detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if ops.ops.count > 1 {
-                    Text("+\(ops.ops.count - 1)").font(Brand.mono(9, .medium)).foregroundStyle(Brand.textSecondary)
-                }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 9).fill(Brand.cardFill))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Brand.hairline, lineWidth: 1))
-        }
-    }
+    // MARK: Activity icon (shown inline in the header)
 
     @ViewBuilder
     private func opIcon(_ phase: OperationCenter.Phase) -> some View {

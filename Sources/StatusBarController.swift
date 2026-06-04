@@ -35,12 +35,11 @@ final class StatusBarController {
         // Dark to match the app's glass aesthetic (affects the popover
         // chrome + arrow; the HUD content paints its own dark surface).
         popover.appearance = NSAppearance(named: .darkAqua)
-        // Initial size hint for the first measurement pass; the HUD
-        // (health hero + metric grid + disk/battery + processes + footer)
-        // is ~600 px tall once a sample lands.
-        popover.contentSize = NSSize(width: 334, height: 600)
-        popover.contentViewController = NSHostingController(
-            rootView: PopupView(db: db, sampler: sampler, delegate: delegate))
+        // Initial size hint for the first measurement pass; HUDController
+        // then drives the real (screen-capped) size via preferredContentSize.
+        popover.contentSize = NSSize(width: 334, height: 560)
+        popover.contentViewController = HUDController(
+            root: PopupView(db: db, sampler: sampler, delegate: delegate))
         self.popover = popover
 
         if let button = self.item.button {
