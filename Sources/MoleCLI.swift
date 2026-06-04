@@ -10,8 +10,9 @@
 //      Emits the full system snapshot as JSON in ~3 KB. Auto-emits JSON
 //      when stdout is not a TTY, but we pass `--json` explicitly so the
 //      contract is visible in the args.
-//    * `mo clean --dry-run` — cleanup preview (CleanupView, future).
-//    * `mo uninstall --json` — uninstall surface (future).
+//    * `mo clean` / `mo optimize` — CleanView / OptimizeView (streamed).
+//    * `mo analyze --json` — Analyze treemap (DiskScanner).
+//    * `mo uninstall --list` — Software tab app list (JSON).
 //
 //  Everything routes through `run(args:)` so subprocess plumbing
 //  (timeout, env, NSPipe management) lives in one place.

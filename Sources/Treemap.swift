@@ -14,8 +14,8 @@
 //  aspect ratio worse than the current row's. Rotate orientation when
 //  the remaining strip becomes wider than tall (and vice versa).
 //
-//  Pure module — no SwiftUI, no AppKit, no IO. Drives DiskMapView's
-//  rendering but is testable in isolation.
+//  Pure module — no SwiftUI, no AppKit, no IO. Drives the Analyze tab's
+//  treemap (AnalyzeView) but is testable in isolation.
 //
 
 import CoreGraphics
