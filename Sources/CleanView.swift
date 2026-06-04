@@ -88,12 +88,12 @@ struct CleanView: View {
     private func confirmReal() {
         let alert = NSAlert()
         alert.messageText = "Clean caches for real?"
-        alert.informativeText = "Burrow will run `mo clean`. Cache files are removed permanently; Mole's whitelist and safety rules still apply. Root-only system caches are skipped — no password needed."
+        alert.informativeText = "Burrow will run `mo clean` with administrator rights. Cache files are removed permanently; Mole's whitelist and safety rules still apply."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clean")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         mode = .real
-        runner.run(["clean"], label: "Cleaning caches")
+        runner.run(["clean"], elevated: true, label: "Cleaning caches")
     }
 }

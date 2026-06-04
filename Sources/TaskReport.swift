@@ -117,14 +117,6 @@ final class CommandRunner: ObservableObject {
         let t = Process()
         t.executableURL = URL(fileURLWithPath: mo)
         t.arguments = args
-        // Run like a non-interactive shell that can't escalate, so `mo`
-        // skips the few root-only system caches instead of popping admin
-        // password dialogs. SUDO_ASKPASS=/usr/bin/false makes any sudo
-        // attempt fail silently rather than prompt.
-        var env = Foundation.ProcessInfo.processInfo.environment
-        if env["TERM"] == nil { env["TERM"] = "xterm-256color" }
-        env["SUDO_ASKPASS"] = "/usr/bin/false"
-        t.environment = env
         let outPipe = Pipe(), errPipe = Pipe()
         t.standardOutput = outPipe
         t.standardError = errPipe

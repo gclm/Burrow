@@ -18,7 +18,7 @@ struct OptimizeView: View {
     var body: some View {
         if runner.phase == .idle {
             ToolHero(tool: .optimize, title: "Optimize", subtitle: Tool.optimize.tagline) {
-                PillButton(title: "Optimize") { preview = false; runner.run(["optimize"], label: "Optimizing") }
+                PillButton(title: "Optimize") { preview = false; runner.run(["optimize"], elevated: true, label: "Optimizing") }
                 PillButton(title: "Preview", filled: false) { preview = true; runner.run(["optimize", "--dry-run"], label: "Optimize preview") }
             }
         } else {
@@ -41,7 +41,7 @@ struct OptimizeView: View {
             Text(statusText).font(Brand.mono(12)).foregroundStyle(Brand.textSecondary)
             Spacer()
             if isDone {
-                Button { preview = false; runner.run(["optimize"], label: "Optimizing") } label: {
+                Button { preview = false; runner.run(["optimize"], elevated: true, label: "Optimizing") } label: {
                     Label("Run again", systemImage: "arrow.clockwise")
                         .font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
                 }.buttonStyle(.plain)

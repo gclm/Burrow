@@ -35,9 +35,11 @@ final class HUDController: NSViewController {
     override func loadView() {
         let scroll = NSScrollView()
         scroll.drawsBackground = false
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
-        scroll.hasVerticalScroller = true
+        // No scroller object at all → no scrollbar can ever appear (not
+        // even with "Show scroll bars: Always"). Overflow still scrolls via
+        // trackpad/wheel; in practice the panel is capped to the screen so
+        // it rarely needs to.
+        scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = false
         scroll.automaticallyAdjustsContentInsets = false
 
