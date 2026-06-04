@@ -3,11 +3,10 @@
 //  Burrow
 //
 //  The Optimize tab — mole.fit's "Mercury" one-tap maintenance, our
-//  brand. Hero with an "Optimize" button (runs the safe maintenance
-//  tasks) and a "Preview" button (`--dry-run`). Results render through
-//  the shared TaskReportView. Optimize only touches caches/services
-//  Mole considers safe, so it doesn't need the destructive confirm that
-//  Clean's real run does.
+//  brand. "Optimize" runs the safe maintenance tasks (elevated through a
+//  single auth prompt so there aren't repeated password dialogs);
+//  "Preview" is a no-auth `--dry-run`. Results render through the shared
+//  TaskReportView and finish on a done banner.
 //
 
 import SwiftUI
@@ -19,14 +18,19 @@ struct OptimizeView: View {
     var body: some View {
         if runner.phase == .idle {
             ToolHero(tool: .optimize, title: "Optimize", subtitle: Tool.optimize.tagline) {
-                PillButton(title: "Optimize") { preview = false; runner.run(["optimize"]) }
+                PillButton(title: "Optimize") { preview = false; runner.run(["optimize"], elevated: true) }
                 PillButton(title: "Preview", filled: false) { preview = true; runner.run(["optimize", "--dry-run"]) }
             }
         } else {
+            let report = parseTaskReport(runner.lines)
             VStack(spacing: 0) {
                 statusBar.padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 12)
                 Rectangle().fill(Brand.hairline).frame(height: 1)
-                TaskReportView(groups: parseTaskReport(runner.lines).groups, accent: Tool.optimize.accent)
+                if isDone, !preview {
+                    DoneBanner(accent: Tool.optimize.accent, title: "Maintenance complete",
+                               detail: "\(report.groups.count) areas refreshed")
+                }
+                TaskReportView(groups: report.groups, accent: Tool.optimize.accent)
             }
         }
     }
@@ -37,7 +41,7 @@ struct OptimizeView: View {
             Text(statusText).font(Brand.mono(12)).foregroundStyle(Brand.textSecondary)
             Spacer()
             if isDone {
-                Button { preview = false; runner.run(["optimize"]) } label: {
+                Button { preview = false; runner.run(["optimize"], elevated: true) } label: {
                     Label("Run again", systemImage: "arrow.clockwise")
                         .font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
                 }.buttonStyle(.plain)

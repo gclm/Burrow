@@ -14,6 +14,7 @@
 
 import SwiftUI
 import AppKit
+import CoreServices
 
 struct InstalledApp: Identifiable {
     let id: String
@@ -24,9 +25,10 @@ struct InstalledApp: Identifiable {
     let path: String
     let sizeStr: String
     let sizeBytes: Int64
+    let lastUsed: Date?
 }
 
-enum AppSort: String, CaseIterable { case size = "Size", name = "Name", source = "Source" }
+enum AppSort: String, CaseIterable { case size = "Size", name = "Name", recent = "Recent", source = "Source" }
 enum SoftwareSegment { case uninstall, updates }
 
 struct SoftwareView: View {
@@ -209,6 +211,7 @@ final class SoftwareModel: ObservableObject {
         switch sort {
         case .size:   return base.sorted { $0.sizeBytes > $1.sizeBytes }
         case .name:   return base.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .recent: return base.sorted { ($0.lastUsed ?? .distantPast) > ($1.lastUsed ?? .distantPast) }
         case .source: return base.sorted { $0.source < $1.source }
         }
     }
@@ -264,8 +267,23 @@ final class SoftwareModel: ObservableObject {
                 uninstallName: d["uninstall_name"] as? String ?? name,
                 path: path,
                 sizeStr: sizeStr,
-                sizeBytes: parseSize(sizeStr))
+                sizeBytes: parseSize(sizeStr),
+                lastUsed: lastUsedDate(path))
         }
+    }
+
+    /// Best-effort "last used": Spotlight's kMDItemLastUsedDate when it's
+    /// available, else the bundle's access/modification date.
+    private static func lastUsedDate(_ path: String) -> Date? {
+        if let item = MDItemCreate(nil, path as CFString),
+           let v = MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date {
+            return v
+        }
+        let url = URL(fileURLWithPath: path)
+        if let vals = try? url.resourceValues(forKeys: [.contentAccessDateKey, .contentModificationDateKey]) {
+            return vals.contentAccessDate ?? vals.contentModificationDate
+        }
+        return nil
     }
 
     static func parseSize(_ s: String) -> Int64 {

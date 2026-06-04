@@ -2,11 +2,11 @@
 //  CleanView.swift
 //  Burrow
 //
-//  The Clean tab — mole.fit's "Earth" flow, our brand. Hero with a
-//  "Scan your Mac" button → runs `mo clean --dry-run` → a themed report
-//  of what would be freed, headlined by the reclaimable total. The
-//  "Clean for real" button is gated on a finished dry run and a confirm
-//  dialog, because real cleaning deletes caches permanently.
+//  The Clean tab — mole.fit's "Earth" flow, our brand. The hero offers
+//  both a no-risk "Scan your Mac" preview (`mo clean --dry-run`) and a
+//  direct "Clean Now" run. The real clean runs elevated through ONE auth
+//  prompt (CommandRunner.runElevated) so you don't get a stack of
+//  password dialogs, and finishes on a proper done banner.
 //
 
 import SwiftUI
@@ -22,13 +22,19 @@ struct CleanView: View {
         if runner.phase == .idle {
             ToolHero(tool: .clean, title: "Clean", subtitle: Tool.clean.tagline) {
                 PillButton(title: "Scan your Mac") { startDry() }
+                PillButton(title: "Clean Now", filled: false) { confirmReal() }
             }
         } else {
+            let report = parseTaskReport(runner.lines)
             VStack(spacing: 0) {
                 statusBar.padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 12)
                 Rectangle().fill(Brand.hairline).frame(height: 1)
-                let report = parseTaskReport(runner.lines)
-                if mode == .dry, let s = report.summary { summaryBanner(s) }
+                if isDone, mode == .real {
+                    DoneBanner(accent: Tool.clean.accent, title: "Cleaned",
+                               detail: report.summary.map { "Freed up to \($0.space) · \($0.items) items" })
+                } else if mode == .dry, let s = report.summary {
+                    summaryBanner(s)
+                }
                 TaskReportView(groups: report.groups, accent: Tool.clean.accent)
             }
         }
@@ -82,12 +88,12 @@ struct CleanView: View {
     private func confirmReal() {
         let alert = NSAlert()
         alert.messageText = "Clean caches for real?"
-        alert.informativeText = "Burrow will run `mo clean`. Cache files are removed permanently (not sent to Trash). Mole's whitelist and safety rules still apply."
+        alert.informativeText = "Burrow will run `mo clean` with administrator rights (one password prompt). Cache files are removed permanently; Mole's whitelist and safety rules still apply."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clean")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         mode = .real
-        runner.run(["clean"])
+        runner.run(["clean"], elevated: true)
     }
 }

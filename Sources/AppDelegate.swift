@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         maintenance.start()
 
         self.statusBar = StatusBarController(db: db, sampler: sampler, delegate: self)
+        self.setupMainMenu()
 
         // Dev affordance: launch with BURROW_OPEN_ON_LAUNCH=1 to pop the
         // main window straight away (used for screenshot/verify loops).
@@ -137,9 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.delegate = self
 
         // Show a Dock icon (and Cmd-Tab presence) while the dashboard is
-        // open; we drop back to a pure menu-bar agent when it closes.
+        // open; we drop back to a pure menu-bar agent when it closes. The
+        // icon itself comes from Assets.xcassets/AppIcon.
         NSApp.setActivationPolicy(.regular)
-        NSApp.applicationIconImage = AppDelegate.dockIcon
 
         let wc = NSWindowController(window: window)
         self.mainWC = wc
@@ -165,37 +166,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
     }
 
-    // MARK: - Dock icon
+    // MARK: - Main menu
 
-    /// Burrow's mark drawn into an app icon: a cream disc with the dark
-    /// burrow mouth on a rounded espresso tile. Programmatic for now so we
-    /// don't need an asset-catalog AppIcon.
-    static let dockIcon: NSImage = {
-        let size = NSSize(width: 512, height: 512)
-        let img = NSImage(size: size)
-        img.lockFocus()
-        let full = NSRect(origin: .zero, size: size)
+    /// Minimal AppKit main menu — shows when the app is active (.regular,
+    /// i.e. a window open). Gives a real ⌘, (Settings pane), proper Quit,
+    /// and an Edit menu so text fields get cut/copy/paste/select-all.
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
 
-        let tile = NSBezierPath(roundedRect: full.insetBy(dx: 26, dy: 26), xRadius: 110, yRadius: 110)
-        NSColor(srgbRed: 0.14, green: 0.11, blue: 0.07, alpha: 1).setFill()
-        tile.fill()
+        // App menu
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "About Burrow",
+                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let settings = NSMenuItem(title: "Settings…",
+                                  action: #selector(openSettingsFromMenu), keyEquivalent: ",")
+        settings.target = self
+        appMenu.addItem(settings)
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide Burrow", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Quit Burrow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
-        let disc = full.insetBy(dx: 116, dy: 116)
-        NSColor(srgbRed: 0.95, green: 0.92, blue: 0.86, alpha: 1).setFill()
-        NSBezierPath(ovalIn: disc).fill()
+        // Edit menu (text editing in search fields etc.)
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
-        let cx = full.midX
-        let baseY = full.height * 0.44
-        let r = full.width * 0.17
-        let dome = NSBezierPath()
-        dome.move(to: NSPoint(x: cx - r, y: baseY))
-        dome.appendArc(withCenter: NSPoint(x: cx, y: baseY), radius: r,
-                       startAngle: 180, endAngle: 0, clockwise: true)
-        dome.close()
-        NSColor(srgbRed: 0.14, green: 0.11, blue: 0.07, alpha: 1).setFill()
-        dome.fill()
+        // Window menu
+        let winItem = NSMenuItem()
+        mainMenu.addItem(winItem)
+        let winMenu = NSMenu(title: "Window")
+        winItem.submenu = winMenu
+        winMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        winMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
-        img.unlockFocus()
-        return img
-    }()
+        NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = winMenu
+    }
+
+    @objc private func openSettingsFromMenu() {
+        if #available(macOS 14, *) { openMainWindow(initial: .settings) }
+    }
 }

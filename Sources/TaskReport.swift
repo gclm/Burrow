@@ -102,10 +102,13 @@ final class CommandRunner: ObservableObject {
 
     private var task: Process?
     private var buffer = ""
+    private var tailTimer: Timer?
+    private var logHandle: FileHandle?
 
-    func run(_ args: [String]) {
+    func run(_ args: [String], elevated: Bool = false) {
         guard let mo = MoleCLI.findExecutable() else { phase = .failed("mo not found"); return }
         lines = []; buffer = ""; phase = .running
+        if elevated { runElevated(mo: mo, args: args); return }
 
         let t = Process()
         t.executableURL = URL(fileURLWithPath: mo)
@@ -135,7 +138,51 @@ final class CommandRunner: ObservableObject {
         catch { phase = .failed(error.localizedDescription) }
     }
 
-    func cancel() { if let t = task, t.isRunning { t.terminate() } }
+    func cancel() {
+        if let t = task, t.isRunning { t.terminate() }
+        tailTimer?.invalidate(); tailTimer = nil
+    }
+
+    /// Run `mo <args>` as root via ONE osascript auth prompt, instead of
+    /// `mo` prompting per privileged step (which produced several password
+    /// dialogs for a single clean). `do shell script` doesn't stream, so we
+    /// redirect output to a temp log and tail it for live updates.
+    private func runElevated(mo: String, args: [String]) {
+        let safe = args.map { $0.filter(\.isLetter) }.joined(separator: "-")
+        let logPath = NSTemporaryDirectory() + "burrow-op-\(safe).log"
+        FileManager.default.createFile(atPath: logPath, contents: Data())
+        let inner = "\(mo) \(args.joined(separator: " ")) > '\(logPath)' 2>&1"
+        let script = "do shell script \"\(inner)\" with administrator privileges"
+
+        let t = Process()
+        t.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        t.arguments = ["-e", script]
+        t.standardOutput = Pipe()
+        t.standardError = Pipe()
+
+        self.logHandle = FileHandle(forReadingAtPath: logPath)
+        self.tailTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.drainLog() }
+        }
+        t.terminationHandler = { proc in
+            Task { @MainActor in
+                self.drainLog()
+                self.tailTimer?.invalidate(); self.tailTimer = nil
+                try? self.logHandle?.close(); self.logHandle = nil
+                self.phase = (proc.terminationStatus != 0 && self.lines.isEmpty)
+                    ? .failed("authorization cancelled") : .done(proc.terminationStatus)
+            }
+        }
+        do { try t.run(); task = t }
+        catch { phase = .failed(error.localizedDescription) }
+    }
+
+    private func drainLog() {
+        guard let h = logHandle else { return }
+        let data = h.readDataToEndOfFile()
+        guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else { return }
+        ingest(CommandRunner.stripAnsi(s))
+    }
 
     private func ingest(_ s: String) {
         buffer += s
@@ -172,32 +219,41 @@ struct TaskReportView: View {
     let accent: Color
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 10) {
-                ForEach(groups) { group in
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(group.title.uppercased())
-                                .font(Brand.mono(10, .bold)).tracking(0.7)
-                                .foregroundStyle(accent)
-                            ForEach(group.items) { item in
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    marker(item.marker)
-                                    Text(item.text)
-                                        .font(Brand.sans(12))
-                                        .foregroundStyle(textColor(item.marker))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Spacer(minLength: 0)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(group.title.uppercased())
+                                    .font(Brand.mono(10, .bold)).tracking(0.7)
+                                    .foregroundStyle(accent)
+                                ForEach(Array(group.items.enumerated()), id: \.offset) { _, item in
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        marker(item.marker)
+                                        Text(item.text)
+                                            .font(Brand.sans(12))
+                                            .foregroundStyle(textColor(item.marker))
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Spacer(minLength: 0)
+                                    }
                                 }
                             }
                         }
                     }
+                    Color.clear.frame(height: 1).id("BOTTOM")
                 }
+                .padding(.horizontal, 18).padding(.vertical, 12)
             }
-            .padding(.horizontal, 18).padding(.vertical, 12)
+            .scrollIndicators(.hidden)
+            // Tail-follow the report as new lines stream in.
+            .onChange(of: itemCount) { _, _ in
+                withAnimation(.linear(duration: 0.15)) { proxy.scrollTo("BOTTOM", anchor: .bottom) }
+            }
         }
-        .scrollIndicators(.hidden)
     }
+
+    private var itemCount: Int { groups.reduce(0) { $0 + $1.items.count } }
 
     @ViewBuilder
     private func marker(_ m: TaskMarker) -> some View {
@@ -268,5 +324,31 @@ struct ToolHero<Buttons: View>: View {
             Spacer(); Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Success header shown above a finished Clean / Optimize report.
+struct DoneBanner: View {
+    let accent: Color
+    let title: String
+    var detail: String? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(accent.opacity(0.18)).frame(width: 38, height: 38)
+                Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundStyle(accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(Brand.sans(15, .semibold)).foregroundStyle(Brand.textPrimary)
+                if let d = detail { Text(d).font(Brand.mono(11)).foregroundStyle(Brand.textSecondary) }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(accent.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(accent.opacity(0.35), lineWidth: 1))
+        .padding(.horizontal, 18).padding(.top, 8)
     }
 }

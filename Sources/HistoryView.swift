@@ -48,6 +48,28 @@ struct ProcessRow: Identifiable {
     let peakMem: Double
 }
 
+/// Splits a series into segments wherever consecutive samples are farther
+/// apart than `gap` — so a line is only drawn across genuinely contiguous
+/// data. Two far-apart points become two single-point segments, which
+/// render no line at all (the chart reads empty instead of drawing a
+/// straight line across a gap where Burrow simply wasn't sampling).
+private struct HistorySegment: Identifiable {
+    let id = UUID()
+    let time: Date
+    let value: Double
+    let key: String
+
+    static func split(_ pts: [ChartPoint], name: String, gap: TimeInterval) -> [HistorySegment] {
+        var out: [HistorySegment] = []
+        var seg = 0
+        for (i, p) in pts.enumerated() {
+            if i > 0, p.time.timeIntervalSince(pts[i - 1].time) > gap { seg += 1 }
+            out.append(HistorySegment(time: p.time, value: p.value, key: "\(name)#\(seg)"))
+        }
+        return out
+    }
+}
+
 private struct HistorySnapshot {
     var cpuUsage: [ChartPoint] = []
     var cpuLoad1: [ChartPoint] = []
@@ -239,6 +261,9 @@ struct HistoryView: View {
                            _ series: [(name: String, points: [ChartPoint], color: Color)]) -> some View {
         let allEmpty = series.allSatisfy { $0.points.isEmpty }
         let style = AxisStyle.forRangeMinutes(range.minutes)
+        let window = Double(range.minutes * 60)
+        let strideSec = max(1.0, window / 720.0)
+        let gapThreshold = max(Double(Store.sampleIntervalSeconds), strideSec) * 3.5
         return GlassCard {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -252,9 +277,9 @@ struct HistoryView: View {
                 } else {
                     Chart {
                         ForEach(series, id: \.name) { s in
-                            ForEach(s.points) { p in
+                            ForEach(HistorySegment.split(s.points, name: s.name, gap: gapThreshold)) { p in
                                 LineMark(x: .value("Time", p.time), y: .value("Value", p.value),
-                                         series: .value("Series", s.name))
+                                         series: .value("Series", p.key))
                                     .foregroundStyle(s.color)
                                     .interpolationMethod(.monotone)
                             }

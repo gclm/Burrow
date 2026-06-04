@@ -44,12 +44,8 @@ final class StatusBarController {
         self.popover = popover
 
         if let button = self.item.button {
-            // Burrow's menu-bar glyph. The "trend" chart icon mirrors
-            // the app's purpose (history-over-time) better than the
-            // earlier house-lodge placeholder.
-            button.image = NSImage(systemSymbolName: "chart.line.uptrend.xyaxis",
-                                   accessibilityDescription: "Burrow")
-            button.image?.isTemplate = true
+            // Burrow's own mark as a template glyph (adapts to the menu bar).
+            button.image = BurrowIcons.menuBar
             button.action = #selector(self.handleClick(_:))
             button.target = self
         }
