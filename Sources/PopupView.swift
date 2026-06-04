@@ -25,23 +25,31 @@ struct PopupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            header
-            if ops.hasActivity { activitySection }
-            if let s = model.snap {
-                healthHero(s)
-                metricGrid(s)
-                DiskBatteryRows(s: s)
-                topProcesses(s)
-            } else {
-                waiting
+        // Cap the height to the screen so the dropdown can't run off the
+        // bottom; scroll if the content is taller. No custom background —
+        // the popover's own (dark) material paints the box AND the arrow,
+        // so they match.
+        let maxH = min(620, (NSScreen.main?.visibleFrame.height ?? 760) - 24)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 11) {
+                header
+                if ops.hasActivity { activitySection }
+                if let s = model.snap {
+                    healthHero(s)
+                    metricGrid(s)
+                    DiskBatteryRows(s: s)
+                    topProcesses(s)
+                } else {
+                    waiting
+                }
+                Rectangle().fill(Brand.hairline).frame(height: 1)
+                footer
             }
-            Rectangle().fill(Brand.hairline).frame(height: 1)
-            footer
+            .padding(13)
+            .frame(width: 334)
         }
-        .padding(13)
-        .frame(width: 334)
-        .background(ZStack { VisualEffectBackground(material: .hudWindow); Color.black.opacity(0.34) })
+        .frame(width: 334, height: maxH)
+        .scrollIndicators(.hidden)
         .environment(\.colorScheme, .dark)
         .onAppear { model.start() }
         .onDisappear { model.stop() }
