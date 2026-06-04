@@ -21,8 +21,8 @@ struct CleanView: View {
     var body: some View {
         if runner.phase == .idle {
             ToolHero(tool: .clean, title: "Clean", subtitle: Tool.clean.tagline) {
-                PillButton(title: "Scan your Mac") { startDry() }
-                PillButton(title: "Clean Now", filled: false) { confirmReal() }
+                PillButton(title: "Clean Now") { confirmReal() }
+                PillButton(title: "Preview", filled: false) { startDry() }
             }
         } else {
             let report = parseTaskReport(runner.lines)
