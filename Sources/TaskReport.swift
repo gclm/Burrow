@@ -100,14 +100,18 @@ final class CommandRunner: ObservableObject {
     @Published var phase: Phase = .idle
     @Published var lines: [String] = []
 
+    let opId = UUID()
+    private var operationLabel: String?
     private var task: Process?
     private var buffer = ""
     private var tailTimer: Timer?
     private var logHandle: FileHandle?
 
-    func run(_ args: [String], elevated: Bool = false) {
+    func run(_ args: [String], elevated: Bool = false, label: String? = nil) {
         guard let mo = MoleCLI.findExecutable() else { phase = .failed("mo not found"); return }
         lines = []; buffer = ""; phase = .running
+        operationLabel = label
+        if let label { OperationCenter.shared.begin(opId, label: label) }
         if elevated { runElevated(mo: mo, args: args); return }
 
         let t = Process()
@@ -132,6 +136,9 @@ final class CommandRunner: ObservableObject {
             DispatchQueue.main.async {
                 self.flush()
                 self.phase = .done(proc.terminationStatus)
+                if self.operationLabel != nil {
+                    OperationCenter.shared.end(self.opId, success: proc.terminationStatus == 0)
+                }
             }
         }
         do { try t.run(); task = t }
@@ -171,6 +178,9 @@ final class CommandRunner: ObservableObject {
                 try? self.logHandle?.close(); self.logHandle = nil
                 self.phase = (proc.terminationStatus != 0 && self.lines.isEmpty)
                     ? .failed("authorization cancelled") : .done(proc.terminationStatus)
+                if self.operationLabel != nil {
+                    OperationCenter.shared.end(self.opId, success: proc.terminationStatus == 0)
+                }
             }
         }
         do { try t.run(); task = t }
@@ -189,6 +199,9 @@ final class CommandRunner: ObservableObject {
         var parts = buffer.components(separatedBy: "\n")
         buffer = parts.removeLast()
         lines.append(contentsOf: parts)
+        if operationLabel != nil, let last = parts.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            OperationCenter.shared.detail(opId, last)
+        }
     }
     private func flush() { if !buffer.isEmpty { lines.append(buffer); buffer = "" } }
 

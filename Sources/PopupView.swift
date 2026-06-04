@@ -16,6 +16,7 @@ import AppKit
 
 struct PopupView: View {
     @StateObject private var model: HUDModel
+    @ObservedObject private var ops = OperationCenter.shared
     private weak var delegate: AppDelegate?
 
     init(db: DB, sampler: Sampler, delegate: AppDelegate) {
@@ -26,6 +27,7 @@ struct PopupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             header
+            if ops.hasActivity { activitySection }
             if let s = model.snap {
                 healthHero(s)
                 metricGrid(s)
@@ -64,6 +66,42 @@ struct PopupView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 14)
+    }
+
+    // MARK: Activity (operations started in the window)
+
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Eyebrow(text: "Activity", glyph: "bolt.fill", color: Brand.gold)
+            ForEach(ops.ops) { op in
+                HStack(spacing: 8) {
+                    opIcon(op.phase)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(op.label).font(Brand.sans(11, .medium)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                        if !op.detail.isEmpty {
+                            Text(op.detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 4)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Brand.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func opIcon(_ phase: OperationCenter.Phase) -> some View {
+        switch phase {
+        case .running:
+            ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 16, height: 16)
+        case .done:
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 13)).foregroundStyle(Brand.green)
+        case .failed:
+            Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(Brand.red)
+        }
     }
 
     // MARK: Health hero

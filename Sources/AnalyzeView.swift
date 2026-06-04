@@ -214,6 +214,7 @@ final class AnalyzeModel: ObservableObject {
     @Published var error: String?
     private var total: Int64 = 0
     private var started = false
+    private let opId = UUID()
 
     var summaryLine: String {
         entries.isEmpty ? "—" : "\(entries.count) items · \(Fmt.bytes(total))"
@@ -248,6 +249,7 @@ final class AnalyzeModel: ObservableObject {
         loading = true
         error = nil
         if push { crumbs.append((name, path)) }
+        OperationCenter.shared.begin(opId, label: "Analyzing \(name)")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let r = try DiskScanner.scan(path)
@@ -256,11 +258,13 @@ final class AnalyzeModel: ObservableObject {
                     self.entries = r.entries
                     self.total = sum
                     self.loading = false
+                    OperationCenter.shared.end(self.opId, success: true, detail: "\(r.entries.count) items · \(Fmt.bytes(sum))")
                 }
             } catch {
                 Task { @MainActor in
                     self.error = error.localizedDescription
                     self.loading = false
+                    OperationCenter.shared.end(self.opId, success: false, detail: "scan failed")
                 }
             }
         }

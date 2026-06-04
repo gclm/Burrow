@@ -33,6 +33,7 @@ enum SoftwareSegment { case uninstall, updates }
 
 struct SoftwareView: View {
     @StateObject private var model = SoftwareModel()
+    @StateObject private var updates = UpdatesModel()
     var isActive: Bool = true
 
     var body: some View {
@@ -101,7 +102,7 @@ struct SoftwareView: View {
     @ViewBuilder
     private var content: some View {
         if model.segment == .updates {
-            updatesPlaceholder
+            UpdatesView(model: updates)
         } else if model.loading {
             VStack { Spacer(); ProgressView("Reading installed apps…").controlSize(.large).tint(Tool.apps.accent)
                 .font(Brand.mono(11)); Spacer() }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,19 +120,6 @@ struct SoftwareView: View {
             }
             .scrollIndicators(.visible)
         }
-    }
-
-    private var updatesPlaceholder: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 34)).foregroundStyle(Tool.apps.accent)
-            Text("Update checks coming soon")
-                .font(Brand.serif(18)).foregroundStyle(Brand.textPrimary)
-            Text("Sparkle · Homebrew · Mac App Store")
-                .font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
-            Spacer()
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var bottomBar: some View {

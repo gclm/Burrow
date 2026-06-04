@@ -83,7 +83,7 @@ struct CleanView: View {
         }
     }
 
-    private func startDry() { mode = .dry; runner.run(["clean", "--dry-run"]) }
+    private func startDry() { mode = .dry; runner.run(["clean", "--dry-run"], label: "Scanning caches") }
 
     private func confirmReal() {
         let alert = NSAlert()
@@ -94,6 +94,6 @@ struct CleanView: View {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         mode = .real
-        runner.run(["clean"], elevated: true)
+        runner.run(["clean"], elevated: true, label: "Cleaning caches")
     }
 }
