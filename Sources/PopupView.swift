@@ -40,6 +40,7 @@ struct PopupView: View {
             } else {
                 waiting
             }
+            if ops.hasActivity { activitySection }
             Rectangle().fill(Brand.hairline).frame(height: 1)
             footer
         }
@@ -57,17 +58,8 @@ struct PopupView: View {
         HStack(spacing: 7) {
             BurrowMark().frame(width: 18, height: 18)
             Text("Burrow").font(Brand.sans(13, .semibold)).foregroundStyle(Brand.textPrimary)
-            Spacer(minLength: 6)
-            // Activity lives in the header so running jobs add no height.
-            if let op = ops.ops.first {
-                opIcon(op.phase)
-                Text(op.label).font(Brand.mono(9, .medium)).foregroundStyle(Brand.textSecondary).lineLimit(1)
-                if ops.ops.count > 1 {
-                    Text("+\(ops.ops.count - 1)").font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
-                }
-            } else {
-                Text(model.freshness).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
-            }
+            Spacer()
+            Text(model.freshness).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
         }
     }
 
@@ -81,7 +73,29 @@ struct PopupView: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: Activity icon (shown inline in the header)
+    // MARK: Activity (cards for running / just-finished jobs, at the bottom)
+
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Eyebrow(text: "Activity", glyph: "bolt.fill", color: Brand.gold)
+            ForEach(ops.ops) { op in
+                HStack(spacing: 8) {
+                    opIcon(op.phase)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(op.label).font(Brand.sans(11, .medium)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                        if !op.detail.isEmpty {
+                            Text(op.detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 4)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Brand.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
 
     @ViewBuilder
     private func opIcon(_ phase: OperationCenter.Phase) -> some View {
