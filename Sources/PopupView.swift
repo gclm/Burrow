@@ -2,209 +2,352 @@
 //  PopupView.swift
 //  Burrow
 //
-//  Menu-bar popover. Replaced in v0.3 — used to be the *primary*
-//  surface (the only place you'd ever see current values) but the
-//  Overview tab inside the main window now does that job at full
-//  fidelity. The popover's job is now narrower:
-//
-//    * Tell you instantly whether Burrow is collecting (freshness
-//      label, four-metric compact readout).
-//    * One click into the main window, pre-selecting the section you
-//      probably wanted.
-//
-//  No sparklines here — they'd compete with the dashboard inside the
-//  main window. Quick glance, dive in.
+//  The menu-bar HUD — Burrow's take on mole.fit's menu-bar popover, on
+//  the same brand + data path as the Status tab. It reuses the Status
+//  data model exactly: live values from `Sampler.lastSnapshot`, mini
+//  sparklines from `DB.findRangeSampled(prefix: Sampler.snapshotPrefix)`,
+//  rendered with the shared Brand components (Eyebrow / MiniChart /
+//  HealthRing / ProgressBar). The popover stays owned by
+//  StatusBarController; this is just the SwiftUI it hosts.
 //
 
 import SwiftUI
+import AppKit
 
 struct PopupView: View {
-    @ObservedObject private var model: PopupModel
+    @StateObject private var model: HUDModel
     private weak var delegate: AppDelegate?
 
-    init(sampler: Sampler, delegate: AppDelegate) {
-        self.model = PopupModel(sampler: sampler)
+    init(db: DB, sampler: Sampler, delegate: AppDelegate) {
+        _model = StateObject(wrappedValue: HUDModel(db: db, sampler: sampler))
         self.delegate = delegate
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        VStack(alignment: .leading, spacing: 11) {
             header
-            Divider()
-            if let snap = model.snapshot {
-                summary(snap)
+            if let s = model.snap {
+                healthHero(s)
+                metricGrid(s)
+                DiskBatteryRows(s: s)
+                topProcesses(s)
             } else {
-                waitingState
+                waiting
             }
-            Divider()
-            actions
+            Rectangle().fill(Brand.hairline).frame(height: 1)
             footer
         }
-        .padding(Theme.Spacing.md)
-        .frame(width: 320)
-        .onReceive(model.tick) { _ in model.refresh() }
+        .padding(13)
+        .frame(width: 334)
+        .background(ZStack { VisualEffectBackground(material: .hudWindow); Color.black.opacity(0.34) })
+        .environment(\.colorScheme, .dark)
+        .onAppear { model.start() }
+        .onDisappear { model.stop() }
     }
 
-    // MARK: - Slices
+    // MARK: Header
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .foregroundStyle(Theme.Colour.accent)
-            Text("Burrow").font(Theme.Font.cardTitle)
+        HStack(spacing: 7) {
+            BurrowMark().frame(width: 18, height: 18)
+            Text("Burrow").font(Brand.sans(13, .semibold)).foregroundStyle(Brand.textPrimary)
             Spacer()
-            Text(model.freshnessLabel)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Colour.textSecondary)
-                .monospacedDigit()
+            Text(model.freshness).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
         }
     }
 
-    private var waitingState: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(spacing: Theme.Spacing.xs) {
-                ProgressView().controlSize(.small)
-                Text("Waiting for first sample…").font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Colour.textSecondary)
+    private var waiting: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Waiting for the first sample…")
+                .font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 14)
+    }
+
+    // MARK: Health hero
+
+    private func healthHero(_ s: MoleStatus) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Eyebrow(text: "Health", glyph: "checkmark.seal.fill", color: Brand.gold)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(s.healthScore)").font(Brand.mono(24, .semibold)).foregroundStyle(Brand.textPrimary)
+                    Text(HealthRating.label(s.healthScore)).font(Brand.sans(11, .medium))
+                        .foregroundStyle(HealthRating.color(s.healthScore))
+                }
+                Text(specLine(s)).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
             }
-            Text("Burrow spawns `mo status --json` at the configured cadence. The first row appears within one tick of launch.")
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Colour.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func summary(_ s: MoleStatus) -> some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            row(symbol: "cpu",
-                tint: Theme.Colour.cpu,
-                label: "CPU",
-                value: String(format: "%.1f %%", s.cpu.usage),
-                detail: String(format: "load %.2f", s.cpu.load1))
-            row(symbol: "memorychip",
-                tint: Theme.Colour.memory,
-                label: "Memory",
-                value: String(format: "%.1f %%", s.memory.usedPercent),
-                detail: s.memory.pressure)
-            row(symbol: "internaldrive",
-                tint: Theme.Colour.disk,
-                label: "Disk",
-                value: String(format: "%.1f MB/s", s.diskIO.readRate + s.diskIO.writeRate),
-                detail: "r+w")
-            row(symbol: "heart.text.square",
-                tint: Theme.Colour.health,
-                label: "Health",
-                value: "\(s.healthScore)",
-                detail: s.healthScoreMsg.isEmpty ? nil : s.healthScoreMsg)
-        }
-    }
-
-    private func row(symbol: String, tint: Color, label: String,
-                     value: String, detail: String?) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: symbol)
-                .foregroundStyle(tint)
-                .frame(width: 16, alignment: .center)
-            Text(label)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Colour.textSecondary)
-                .frame(width: 64, alignment: .leading)
-            Text(value)
-                .font(Theme.Font.mono)
-                .foregroundStyle(Theme.Colour.textPrimary)
             Spacer()
-            if let d = detail {
-                Text(d)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Colour.textTertiary)
-                    .lineLimit(1)
-            }
+            HealthRing(score: s.healthScore, color: HealthRating.color(s.healthScore))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Brand.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
+
+    private func specLine(_ s: MoleStatus) -> String {
+        let cpu = s.hardware.cpuModel.replacingOccurrences(of: "Apple ", with: "")
+        return "\(cpu) · \(s.hardware.totalRam) · up \(Fmt.uptime(s.uptimeSeconds))"
+    }
+
+    // MARK: Metric grid
+
+    private func metricGrid(_ s: MoleStatus) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            HUDTile(eyebrow: "CPU", glyph: "cpu", accent: Brand.green,
+                    value: String(format: "%.0f", s.cpu.usage), unit: "%",
+                    values: model.cpuHist, style: .bars,
+                    foot: String(format: "load %.2f", s.cpu.load1))
+            HUDTile(eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
+                    value: String(format: "%.0f", s.memory.usedPercent), unit: "%",
+                    values: model.memHist, style: .area,
+                    foot: String(format: "%.1f/%.0f GB", Double(s.memory.used) / 1_073_741_824, Double(s.memory.total) / 1_073_741_824))
+            HUDTile(eyebrow: "Network", glyph: "network", accent: Brand.green,
+                    value: netValue(s).0, unit: netValue(s).1,
+                    values: model.netHist, style: .area,
+                    foot: netFoot(s))
+            HUDTile(eyebrow: "GPU", glyph: "cpu.fill", accent: Brand.orange,
+                    value: gpuValue(s).0, unit: gpuValue(s).1,
+                    values: model.gpuHist, style: .area,
+                    foot: (s.gpu?.first?.name ?? "GPU").replacingOccurrences(of: "Apple ", with: ""))
         }
     }
 
-    private var actions: some View {
-        // Primary action sits alone for emphasis; the four deep-link
-        // buttons below let advanced users jump straight to a tab.
-        VStack(spacing: Theme.Spacing.xs) {
-            Button {
-                if #available(macOS 14, *) {
-                    self.delegate?.openMainWindow(initial: .status)
+    private func netValue(_ s: MoleStatus) -> (String, String) {
+        let total = s.network.reduce(0.0) { $0 + $1.rxRateMbs + $1.txRateMbs }
+        return total < 1 ? (String(format: "%.0f", total * 1024), "KB/s") : (String(format: "%.1f", total), "MB/s")
+    }
+    private func netFoot(_ s: MoleStatus) -> String {
+        let n = s.network.first(where: { !$0.ip.isEmpty }) ?? s.network.first
+        return n.map { "↓ \(Int($0.rxRateMbs * 1024)) ↑ \(Int($0.txRateMbs * 1024)) KB/s" } ?? "—"
+    }
+    private func gpuValue(_ s: MoleStatus) -> (String, String) {
+        let u = s.gpu?.first?.usage ?? -1
+        return u >= 0 ? (String(format: "%.0f", u), "%") : ("—", "")
+    }
+
+    // MARK: Top processes
+
+    private func topProcesses(_ s: MoleStatus) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Eyebrow(text: "Top processes", glyph: "list.bullet", color: Brand.textSecondary)
+            ForEach(Array((s.topProcesses ?? []).prefix(5).enumerated()), id: \.offset) { _, p in
+                HStack(spacing: 8) {
+                    Image(nsImage: AppIcon.image(for: p) ?? PopupView.blankIcon)
+                        .resizable().frame(width: 15, height: 15)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    Text(p.name).font(Brand.sans(11)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text(String(format: "%.1f%%", p.cpu)).font(Brand.mono(10))
+                        .foregroundStyle(p.cpu > 30 ? Brand.orange : Brand.textSecondary)
                 }
-            } label: {
-                HStack {
-                    Image(systemName: "rectangle.expand.vertical")
-                    Text("Open Burrow")
-                    Spacer()
-                    Image(systemName: "arrow.up.right.square")
-                        .imageScale(.small)
-                        .foregroundStyle(Theme.Colour.textTertiary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return)
-
-            HStack(spacing: Theme.Spacing.xs) {
-                deepLink(title: "Status",   symbol: "waveform.path.ecg", tool: .status)
-                deepLink(title: "Analyze",  symbol: "square.grid.2x2",   tool: .analyze)
-                deepLink(title: "Clean",    symbol: "sparkles",          tool: .clean)
-                deepLink(title: "Software", symbol: "shippingbox",       tool: .apps)
             }
         }
     }
 
-    @available(macOS 14.0, *)
-    private func deepLink(title: String, symbol: String, tool: Tool) -> some View {
-        Button {
-            self.delegate?.openMainWindow(initial: tool)
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: symbol).imageScale(.small)
-                Text(title).font(Theme.Font.caption)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.bordered)
-    }
+    private static let blankIcon = NSImage(size: NSSize(width: 15, height: 15))
+
+    // MARK: Footer
 
     private var footer: some View {
-        HStack {
-            Text("MCP @ 127.0.0.1:\(Store.queryServerPort)")
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Colour.textTertiary)
-            Spacer()
-            Button("Quit", action: { NSApp.terminate(nil) })
-                .keyboardShortcut("q", modifiers: .command)
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+        VStack(spacing: 8) {
+            HStack(spacing: 5) {
+                ForEach(Tool.navOrder) { tool in
+                    Button { open(tool) } label: {
+                        Text(tool.label).font(Brand.mono(9, .medium))
+                            .foregroundStyle(Brand.textSecondary)
+                            .padding(.horizontal, 7).padding(.vertical, 4)
+                            .background(Capsule().fill(Brand.chipFill))
+                    }.buttonStyle(.plain)
+                }
+            }
+            HStack(spacing: 12) {
+                iconButton("clock.arrow.circlepath") { openHistory() }
+                iconButton("gearshape") { openSettings() }
+                Spacer()
+                Button("Open Burrow") { open(.status) }
+                    .buttonStyle(.plain)
+                    .font(Brand.sans(11, .semibold)).foregroundStyle(Brand.textPrimary)
+                iconButton("power") { NSApp.terminate(nil) }
+            }
+            Text("MCP 127.0.0.1:\(Store.queryServerPort)")
+                .font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func iconButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Brand.textSecondary)
+        }.buttonStyle(.plain)
+    }
+
+    private func open(_ tool: Tool) {
+        if #available(macOS 14, *) { delegate?.openMainWindow(initial: tool) }
+    }
+    private func openSettings() { if #available(macOS 14, *) { delegate?.openSettingsWindow() } }
+    private func openHistory() { if #available(macOS 14, *) { delegate?.openHistoryWindow() } }
+}
+
+// MARK: - Compact tile
+
+private struct HUDTile: View {
+    let eyebrow: String
+    let glyph: String
+    let accent: Color
+    let value: String
+    var unit: String = ""
+    let values: [Double]
+    var style: MiniChart.Style = .area
+    var foot: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Eyebrow(text: eyebrow, glyph: glyph, color: accent)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value).font(Brand.mono(16, .semibold)).foregroundStyle(Brand.textPrimary)
+                if !unit.isEmpty { Text(unit).font(Brand.mono(9)).foregroundStyle(Brand.textSecondary) }
+            }
+            MiniChart(values: values, color: accent, style: style).frame(height: 16)
+            if let f = foot {
+                Text(f).font(Brand.mono(8.5)).foregroundStyle(Brand.textTertiary).lineLimit(1)
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Brand.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
+}
+
+// MARK: - Disk + Battery rows
+
+private struct DiskBatteryRows: View {
+    let s: MoleStatus
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let disk = s.disks.first {
+                bar(eyebrow: "Disk", glyph: "internaldrive", accent: disk.usedPercent >= 90 ? Brand.red : Brand.blue,
+                    value: Fmt.gb((Double(disk.total) - Double(disk.used)) / 1_073_741_824) + " GB",
+                    detail: String(format: "%.0f%% used", disk.usedPercent),
+                    fraction: disk.usedPercent / 100,
+                    barColor: disk.usedPercent >= 90 ? Brand.red : Brand.blue)
+            }
+            if let b = s.batteries?.first {
+                bar(eyebrow: "Battery", glyph: "battery.100",
+                    accent: b.percent <= 20 ? Brand.red : Brand.green,
+                    value: String(format: "%.0f%%", b.percent),
+                    detail: b.status == "charging" ? "charging" : "\(b.timeLeft) left",
+                    fraction: b.percent / 100,
+                    barColor: b.percent <= 20 ? Brand.red : Brand.green)
+            }
+        }
+    }
+
+    private func bar(eyebrow: String, glyph: String, accent: Color,
+                     value: String, detail: String, fraction: Double, barColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Eyebrow(text: eyebrow, glyph: glyph, color: accent)
+                Spacer()
+                Text(detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+            }
+            Text(value).font(Brand.mono(13, .semibold)).foregroundStyle(Brand.textPrimary)
+            ProgressBar(fraction: fraction, color: barColor)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Brand.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
+}
+
+// MARK: - Shared health rating (also used by Status)
+
+enum HealthRating {
+    static func label(_ score: Int) -> String {
+        switch score {
+        case 90...:   return "Excellent"
+        case 75..<90: return "Good"
+        case 60..<75: return "Fair"
+        case 40..<60: return "Poor"
+        default:      return "Critical"
+        }
+    }
+    static func color(_ score: Int) -> Color {
+        switch score {
+        case 75...:   return Brand.green
+        case 60..<75: return Brand.gold
+        case 40..<60: return Brand.orange
+        default:      return Brand.red
         }
     }
 }
 
-// MARK: - Tick driver
+// MARK: - Model (same data path as StatusModel, lighter)
 
-private final class PopupModel: ObservableObject {
-    @Published var snapshot: MoleStatus?
-    @Published var freshnessLabel: String = "—"
+@MainActor
+final class HUDModel: ObservableObject {
+    @Published var snap: MoleStatus?
+    @Published var freshness = "—"
+    @Published var cpuHist: [Double] = []
+    @Published var memHist: [Double] = []
+    @Published var netHist: [Double] = []
+    @Published var gpuHist: [Double] = []
 
-    let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
+    private let db: DB
     private let sampler: Sampler
+    private var liveTimer: Timer?
+    private var histTimer: Timer?
 
-    init(sampler: Sampler) {
+    init(db: DB, sampler: Sampler) {
+        self.db = db
         self.sampler = sampler
-        self.refresh()
     }
 
-    func refresh() {
-        self.snapshot = self.sampler.lastSnapshot
-        if let last = self.sampler.lastSampleAt {
-            let elapsed = Int(Date().timeIntervalSince(last))
-            self.freshnessLabel = "\(elapsed) s ago"
-        } else {
-            self.freshnessLabel = "—"
+    func start() {
+        refreshCurrent()
+        refreshHistory()
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshCurrent() }
         }
+        histTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshHistory() }
+        }
+    }
+
+    func stop() {
+        liveTimer?.invalidate(); liveTimer = nil
+        histTimer?.invalidate(); histTimer = nil
+    }
+
+    private func refreshCurrent() {
+        snap = sampler.lastSnapshot
+        if let when = sampler.lastSampleAt {
+            freshness = "\(Int(Date().timeIntervalSince(when)))s ago"
+        } else {
+            freshness = "no samples yet"
+        }
+    }
+
+    private func refreshHistory() {
+        let now = Int(Date().timeIntervalSince1970)
+        let rows = db.findRangeSampled(prefix: Sampler.snapshotPrefix,
+                                       since: now - 30 * 60, until: now, maxPoints: 30)
+        var cpu: [Double] = [], mem: [Double] = [], net: [Double] = [], gpu: [Double] = []
+        let dec = JSONDecoder()
+        for r in rows {
+            guard let data = r.json.data(using: .utf8),
+                  let s = try? dec.decode(MoleStatus.self, from: data) else { continue }
+            cpu.append(s.cpu.usage)
+            mem.append(s.memory.usedPercent)
+            net.append(s.network.reduce(0.0) { $0 + $1.rxRateMbs + $1.txRateMbs })
+            gpu.append(max(0, s.gpu?.first?.usage ?? 0))
+        }
+        cpuHist = cpu; memHist = mem; netHist = net; gpuHist = gpu
     }
 }

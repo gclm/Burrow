@@ -209,23 +209,8 @@ struct HealthCard: View {
         let cpu = s.hardware.cpuModel.replacingOccurrences(of: "Apple ", with: "")
         return "\(cpu) · \(s.hardware.totalRam)"
     }
-    private var rating: String {
-        switch s.healthScore {
-        case 90...:  return "Excellent"
-        case 75..<90: return "Good"
-        case 60..<75: return "Fair"
-        case 40..<60: return "Poor"
-        default:     return "Critical"
-        }
-    }
-    private var ratingColor: Color {
-        switch s.healthScore {
-        case 75...:   return Brand.green
-        case 60..<75: return Brand.gold
-        case 40..<60: return Brand.orange
-        default:      return Brand.red
-        }
-    }
+    private var rating: String { HealthRating.label(s.healthScore) }
+    private var ratingColor: Color { HealthRating.color(s.healthScore) }
     private var message: String {
         let m = s.healthScoreMsg
         if let r = m.range(of: ": ") { return String(m[r.upperBound...]) }

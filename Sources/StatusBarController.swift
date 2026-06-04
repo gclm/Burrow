@@ -32,14 +32,15 @@ final class StatusBarController {
         // the @objc selector dispatch.
         let popover = NSPopover()
         popover.behavior = .transient
-        // SwiftUI's NSHostingController auto-sizes the popover to the
-        // root view's intrinsic size, but the initial size hint
-        // matters during the first-render measurement pass. The new
-        // popover has a status block + actions + 4 deep-link buttons
-        // — roughly 360 px tall, less if there's no sample yet.
-        popover.contentSize = NSSize(width: 320, height: 380)
+        // Dark to match the app's glass aesthetic (affects the popover
+        // chrome + arrow; the HUD content paints its own dark surface).
+        popover.appearance = NSAppearance(named: .darkAqua)
+        // Initial size hint for the first measurement pass; the HUD
+        // (health hero + metric grid + disk/battery + processes + footer)
+        // is ~600 px tall once a sample lands.
+        popover.contentSize = NSSize(width: 334, height: 600)
         popover.contentViewController = NSHostingController(
-            rootView: PopupView(sampler: sampler, delegate: delegate))
+            rootView: PopupView(db: db, sampler: sampler, delegate: delegate))
         self.popover = popover
 
         if let button = self.item.button {

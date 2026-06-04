@@ -2,14 +2,11 @@
 //  SettingsView.swift
 //  Burrow
 //
-//  SwiftUI form for the Settings window. Reads + writes Store; restart
-//  requirements are noted next to the controls that actually need one
-//  (port + sampler interval propagate at next tick, no restart).
-//
-//  The window itself is owned by SettingsWindowController so it can
-//  persist position + close-on-deinit cleanly. SwiftUI's @main
-//  `Settings` scene isn't used because Burrow is LSUIElement:true and
-//  has no main menu — opening it from a button is more reliable.
+//  Settings window (opened from the HUD's gear). Same contract as before
+//  — reads/writes the typed `Store`, surfaces `Maintenance` status, and
+//  notes which changes need a relaunch — but reskinned into the Brand
+//  glass system to match the rest of the app. Hosted in a translucent
+//  utility window by AppDelegate.
 //
 
 import SwiftUI
@@ -22,112 +19,134 @@ struct SettingsView: View {
     @State private var dbSizeText: String = "—"
     @State private var lastMaintenanceText: String = "—"
 
-    /// Optional callback when the Settings UI wants the live components
-    /// to react. Wired by AppDelegate; the only consumer today is the
-    /// "Run maintenance now" button.
+    /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
 
     var body: some View {
-        Form {
-            Section {
-                LabeledContent("Currently using", value: dbSizeText)
-                LabeledContent("Last maintenance", value: lastMaintenanceText)
-                Button("Run maintenance now") {
-                    self.onRunMaintenance?()
-                    // Refresh the labels right after — the maintenance
-                    // call is synchronous from runNow.
-                    self.refreshStatusLabels()
-                }
-            } header: {
-                Text("Storage")
-            } footer: {
-                Text("History lives at ~/Library/Application Support/Burrow/burrow.db. Maintenance prunes rows past the retention window every hour.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        ZStack {
+            VisualEffectBackground().ignoresSafeArea()
+            LinearGradient(colors: [Brand.nearBlack.opacity(0.84), Brand.nearBlack.opacity(0.96)],
+                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
 
-            Section("History retention") {
-                Picker("Keep history for", selection: $retentionDays) {
-                    Text("1 day").tag(1)
-                    Text("7 days").tag(7)
-                    Text("14 days").tag(14)
-                    Text("30 days").tag(30)
-                    Text("90 days").tag(90)
-                    Text("180 days").tag(180)
-                    Text("1 year").tag(365)
-                }
-                .onChange(of: retentionDays) { _, new in
-                    Store.retentionDays = new
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Settings").font(Brand.serif(24, .medium)).foregroundStyle(Brand.textPrimary)
 
-                Toggle("Vacuum DB after large prunes", isOn: $autoVacuum)
-                    .onChange(of: autoVacuum) { _, new in
-                        Store.autoVacuum = new
+                    section("Storage", "internaldrive") {
+                        infoRow("Currently using", dbSizeText)
+                        infoRow("Last maintenance", lastMaintenanceText)
+                        HStack {
+                            Spacer()
+                            PillButton(title: "Run maintenance now", filled: false) {
+                                onRunMaintenance?(); refreshStatusLabels()
+                            }
+                        }
+                        footnote("History lives at ~/Library/Application Support/Burrow/burrow.db. Rows past the retention window are pruned hourly.")
                     }
-            }
 
-            Section("Sampling") {
-                Picker("Sample every", selection: $sampleIntervalSeconds) {
-                    Text("5 sec").tag(5)
-                    Text("15 sec").tag(15)
-                    Text("30 sec").tag(30)
-                    Text("60 sec").tag(60)
-                    Text("2 min").tag(120)
-                    Text("5 min").tag(300)
-                }
-                .onChange(of: sampleIntervalSeconds) { _, new in
-                    Store.sampleIntervalSeconds = new
-                }
-                Text("Burrow spawns `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Enable MCP query server", isOn: $queryServerEnabled)
-                    .onChange(of: queryServerEnabled) { _, new in
-                        Store.queryServerEnabled = new
+                    section("History retention", "calendar") {
+                        pickerRow("Keep history for", selection: $retentionDays,
+                                  options: [(1, "1 day"), (7, "7 days"), (14, "14 days"),
+                                            (30, "30 days"), (90, "90 days"), (180, "180 days"), (365, "1 year")]) {
+                            Store.retentionDays = $0
+                        }
+                        toggleRow("Vacuum DB after large prunes", isOn: $autoVacuum) { Store.autoVacuum = $0 }
                     }
-                LabeledContent("Port", value: "127.0.0.1:\(Store.queryServerPort)")
-            } header: {
-                Text("MCP query server")
-            } footer: {
-                Text("Toggle and port changes require a Burrow restart. The localhost JSON HTTP API exposes /health, /info, /snapshot, /metrics — see README.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                    section("Sampling", "waveform.path.ecg") {
+                        pickerRow("Sample every", selection: $sampleIntervalSeconds,
+                                  options: [(5, "5 sec"), (15, "15 sec"), (30, "30 sec"),
+                                            (60, "60 sec"), (120, "2 min"), (300, "5 min")]) {
+                            Store.sampleIntervalSeconds = $0
+                        }
+                        footnote("Burrow runs `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
+                    }
+
+                    section("MCP query server", "antenna.radiowaves.left.and.right") {
+                        toggleRow("Enable MCP query server", isOn: $queryServerEnabled) { Store.queryServerEnabled = $0 }
+                        infoRow("Endpoint", "127.0.0.1:\(Store.queryServerPort)")
+                        footnote("Toggle + port changes take effect after a relaunch. Exposes /health, /info, /snapshot, /metrics over localhost, plus the `Burrow --mcp` stdio server for Claude Code.")
+                    }
+                }
+                .padding(22)
+                .frame(maxWidth: 560, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 520, height: 520)
-        .onAppear { self.refreshStatusLabels() }
+        .frame(minWidth: 480, minHeight: 520)
+        .environment(\.colorScheme, .dark)
+        .onAppear { refreshStatusLabels() }
     }
 
-    /// Reads the on-disk DB size + last maintenance time. Called on
-    /// appear and after the "Run now" button so the user sees the
-    /// effect of their click. Cheap — single stat call + a property
-    /// read.
+    // MARK: - Section + row helpers
+
+    private func section<C: View>(_ title: String, _ glyph: String, @ViewBuilder content: @escaping () -> C) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: title, glyph: glyph, color: Brand.textSecondary)
+                content()
+            }
+        }
+    }
+
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+            Spacer()
+            Text(value).font(Brand.mono(11)).foregroundStyle(Brand.textPrimary)
+        }
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func toggleRow(_ label: String, isOn: Binding<Bool>, onChange: @escaping (Bool) -> Void) -> some View {
+        Toggle(isOn: isOn) {
+            Text(label).font(Brand.sans(12)).foregroundStyle(Brand.textPrimary)
+        }
+        .toggleStyle(.switch)
+        .tint(Brand.green)
+        .onChange(of: isOn.wrappedValue) { _, n in onChange(n) }
+    }
+
+    private func pickerRow(_ label: String, selection: Binding<Int>,
+                           options: [(Int, String)], onChange: @escaping (Int) -> Void) -> some View {
+        HStack {
+            Text(label).font(Brand.sans(12)).foregroundStyle(Brand.textPrimary)
+            Spacer()
+            Picker("", selection: selection) {
+                ForEach(options, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(Brand.textSecondary)
+            .fixedSize()
+            .onChange(of: selection.wrappedValue) { _, n in onChange(n) }
+        }
+    }
+
+    // MARK: - Status labels
+
     private func refreshStatusLabels() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                in: .userDomainMask).first!
             .appendingPathComponent("Burrow", isDirectory: true)
         var total: Int64 = 0
-        // Walk the directory because SQLite WAL has companion files
-        // (.db-wal, .db-shm) that add to the on-disk footprint.
         if let enumerator = FileManager.default.enumerator(at: support,
-                                                          includingPropertiesForKeys: [.fileSizeKey]) {
+                                                           includingPropertiesForKeys: [.fileSizeKey]) {
             for case let url as URL in enumerator {
                 if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
                     total += Int64(size)
                 }
             }
         }
-        let f = ByteCountFormatter()
-        f.countStyle = .file
-        self.dbSizeText = f.string(fromByteCount: total)
+        self.dbSizeText = Fmt.bytes(total)
 
         if let last = AppDelegate.shared?.maintenance?.lastRunAt {
             let delta = Int(Date().timeIntervalSince(last))
-            self.lastMaintenanceText = "\(delta) s ago · pruned \(AppDelegate.shared?.maintenance?.lastPruneDeleted ?? 0) rows"
+            self.lastMaintenanceText = "\(delta)s ago · pruned \(AppDelegate.shared?.maintenance?.lastPruneDeleted ?? 0) rows"
         } else {
             self.lastMaintenanceText = "not yet run"
         }

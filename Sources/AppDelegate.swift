@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// across the window-creation boundary; cleared once the window's
     /// content view reads it.
     private var mainWC: NSWindowController?
+    private var settingsWC: NSWindowController?
+    private var historyWC: NSWindowController?
     fileprivate var pendingInitialTool: Tool = .status
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -156,11 +158,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.contentViewController = host
     }
 
+    // MARK: - Secondary windows (Settings / History)
+
+    /// Shared translucent chrome for the secondary windows — same
+    /// frameless-glass silhouette as the main window, the SwiftUI content
+    /// paints its own dark scrim.
+    private func makeUtilityWindow(title: String, size: NSSize) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                         backing: .buffered, defer: false)
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.title = title
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.isMovableByWindowBackground = true
+        w.center()
+        w.isReleasedWhenClosed = false
+        w.delegate = self
+        return w
+    }
+
+    @available(macOS 14.0, *)
+    func openSettingsWindow() {
+        NSApp.setActivationPolicy(.regular)
+        if let wc = settingsWC, let w = wc.window {
+            w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
+        }
+        let w = makeUtilityWindow(title: "Burrow Settings", size: NSSize(width: 540, height: 600))
+        w.minSize = NSSize(width: 480, height: 520)
+        let host = NSHostingController(rootView: SettingsView(onRunMaintenance: { [weak self] in
+            self?.maintenance?.runNow()
+        }))
+        host.view.wantsLayer = true
+        host.view.layer?.backgroundColor = .clear
+        w.contentViewController = host
+        let wc = NSWindowController(window: w)
+        self.settingsWC = wc
+        wc.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @available(macOS 14.0, *)
+    func openHistoryWindow() {
+        guard let db = self.db else { return }
+        NSApp.setActivationPolicy(.regular)
+        if let wc = historyWC, let w = wc.window {
+            w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
+        }
+        let w = makeUtilityWindow(title: "Burrow History", size: NSSize(width: 1000, height: 720))
+        w.minSize = NSSize(width: 840, height: 600)
+        let host = NSHostingController(rootView: HistoryView(db: db))
+        host.view.wantsLayer = true
+        host.view.layer?.backgroundColor = .clear
+        w.contentViewController = host
+        let wc = NSWindowController(window: w)
+        self.historyWC = wc
+        wc.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     // MARK: - Window delegate
 
     func windowWillClose(_ notification: Notification) {
-        // Dashboard closed → back to a pure menu-bar agent (no Dock icon).
-        NSApp.setActivationPolicy(.accessory)
+        // Drop back to a pure menu-bar agent only when the LAST Burrow
+        // window closes (checked next runloop, after this one is gone).
+        DispatchQueue.main.async {
+            let stillOpen = [self.mainWC, self.settingsWC, self.historyWC]
+                .compactMap { $0?.window }
+                .contains { $0.isVisible }
+            if !stillOpen { NSApp.setActivationPolicy(.accessory) }
+        }
     }
 
     // MARK: - Dock icon
