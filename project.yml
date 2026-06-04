@@ -34,7 +34,9 @@ targets:
       properties:
         LSUIElement: true   # menu-bar agent, no Dock icon
         CFBundleDisplayName: Burrow
-        NSHumanReadableCopyright: "MIT License. Mole CLI © tw93. Inspired by Stats by exelban."
+        CFBundleShortVersionString: "0.4.0"
+        CFBundleVersion: "1"
+        NSHumanReadableCopyright: "MIT License. Mole CLI © tw93. Independent, not affiliated with mole.fit."
     entitlements:
       path: Resources/Burrow.entitlements
       properties:

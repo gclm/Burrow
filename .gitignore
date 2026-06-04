@@ -5,6 +5,7 @@ Burrow.xcodeproj/
 # Xcode build artifacts
 build/
 build_dist/
+dist/
 DerivedData/
 *.swiftpm/
 
