@@ -75,26 +75,29 @@ struct PopupView: View {
 
     // MARK: Activity (operations started in the window)
 
+    /// One fixed-height line (not a growing stack of cards) so running
+    /// jobs can't push the dropdown off the bottom of the screen. Shows
+    /// the most recent op; "+N" if there are others.
+    @ViewBuilder
     private var activitySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Eyebrow(text: "Activity", glyph: "bolt.fill", color: Brand.gold)
-            ForEach(ops.ops) { op in
-                HStack(spacing: 8) {
-                    opIcon(op.phase)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(op.label).font(Brand.sans(11, .medium)).foregroundStyle(Brand.textPrimary).lineLimit(1)
-                        if !op.detail.isEmpty {
-                            Text(op.detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 4)
+        if let op = ops.ops.first {
+            HStack(spacing: 7) {
+                opIcon(op.phase)
+                Text(op.label).font(Brand.sans(11, .medium)).foregroundStyle(Brand.textPrimary)
+                    .lineLimit(1).layoutPriority(1)
+                if !op.detail.isEmpty {
+                    Text(op.detail).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if ops.ops.count > 1 {
+                    Text("+\(ops.ops.count - 1)").font(Brand.mono(9, .medium)).foregroundStyle(Brand.textSecondary)
                 }
             }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 9).fill(Brand.cardFill))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Brand.hairline, lineWidth: 1))
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Brand.cardFill))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
     }
 
     @ViewBuilder
