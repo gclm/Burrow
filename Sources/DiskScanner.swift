@@ -135,7 +135,7 @@ enum DiskScanner {
 
     private static func topLevelSizes(_ paths: [String]) throws -> [String: Int64] {
         guard !paths.isEmpty else { return [:] }
-        let result = try MoleCLI.run(args: ["-sk"] + paths, executable: "/usr/bin/du", timeout: 300)
+        let result = try MoleCLI.run(args: ["-sk"] + paths, executable: "/usr/bin/du", timeout: 20)
         var sizes: [String: Int64] = [:]
         for line in result.stdout.split(separator: "\n") {
             let parts = line.split(separator: "\t", maxSplits: 1)
