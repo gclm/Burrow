@@ -43,14 +43,20 @@ jobs:
             exit 1
           fi
 
-      - name: Publish GitHub release
+      - name: Publish GitHub release (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/Burrow-${{ steps.build.outputs.version }}.zip" \
-            --title "Burrow ${{ steps.build.outputs.version }}" \
-            --notes-file RELEASES.md
+          ZIP="dist/Burrow-${{ steps.build.outputs.version }}.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # Release already exists (e.g. re-run after adding TAP_PAT) —
+            # refresh the asset instead of failing.
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ZIP" \
+              --title "Burrow ${{ steps.build.outputs.version }}" \
+              --notes-file RELEASES.md
+          fi
 
       - name: Bump Homebrew cask in caezium/homebrew-tap
         env:
