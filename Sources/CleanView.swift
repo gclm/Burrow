@@ -15,8 +15,7 @@ import AppKit
 struct CleanView: View {
     @StateObject private var runner = CommandRunner()
     @State private var mode: Mode = .dry
-    @State private var fdaRunAnyway = false
-    @State private var pendingRun: (() -> Void)? = nil
+    @State private var pendingRun: ((Bool) -> Void)? = nil
 
     enum Mode { case dry, real }
 
@@ -25,8 +24,8 @@ struct CleanView: View {
             if pendingRun != nil {
                 FullDiskAccessRequired(
                     accent: Tool.clean.accent,
-                    onRecheck: { if Privacy.hasFullDiskAccess() { runPending() } },
-                    onRunAnyway: { fdaRunAnyway = true; runPending() },
+                    onRecheck: { if Privacy.hasFullDiskAccess() { runPending(elevate: false) } },
+                    onRunAnyway: { runPending(elevate: true) },   // root bypasses TCC → no flood
                     onCancel: { pendingRun = nil })
             } else {
                 ToolHero(tool: .clean, title: "Clean", subtitle: Tool.clean.tagline) {
@@ -102,30 +101,34 @@ struct CleanView: View {
 
     // MARK: - Full Disk Access gate
 
-    /// Run `work`, but if a flood-prone scan would hit the macOS per-folder
-    /// permission prompts (no Full Disk Access yet), divert to the gate
-    /// first instead of letting the flood happen.
-    private func guarded(_ work: @escaping () -> Void) {
-        if !fdaRunAnyway && !Privacy.hasFullDiskAccess() { pendingRun = work }
-        else { work() }
+    /// Run a flood-prone scan. With Full Disk Access we run it directly.
+    /// Without, divert to the gate; the user either grants FDA (then we run
+    /// normally) or picks "Scan with admin", which runs the same command
+    /// elevated — root bypasses TCC, so one password replaces the flood.
+    /// `work(elevate)` decides whether to run via sudo.
+    private func guarded(_ work: @escaping (Bool) -> Void) {
+        if Privacy.hasFullDiskAccess() { work(false) } else { pendingRun = work }
     }
-    private func runPending() { let r = pendingRun; pendingRun = nil; r?() }
+    private func runPending(elevate: Bool) { let r = pendingRun; pendingRun = nil; r?(elevate) }
 
     private func startDry() {
-        guarded { mode = .dry; runner.run(["clean", "--dry-run"], label: "Scanning caches") }
+        guarded { elevate in
+            mode = .dry
+            runner.run(["clean", "--dry-run"], elevated: elevate, label: "Scanning caches")
+        }
     }
 
+    /// The real clean already runs elevated (root), so it never triggers the
+    /// flood — no gate needed here.
     private func confirmReal() {
-        guarded {
-            let alert = NSAlert()
-            alert.messageText = "Clean caches for real?"
-            alert.informativeText = "Burrow will run `mo clean` with administrator rights. Cache files are removed permanently; Mole's whitelist and safety rules still apply."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Clean")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-            mode = .real
-            runner.run(["clean"], elevated: true, label: "Cleaning caches")
-        }
+        let alert = NSAlert()
+        alert.messageText = "Clean caches for real?"
+        alert.informativeText = "Burrow will run `mo clean` with administrator rights. Cache files are removed permanently; Mole's whitelist and safety rules still apply."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clean")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        mode = .real
+        runner.run(["clean"], elevated: true, label: "Cleaning caches")
     }
 }

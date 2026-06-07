@@ -14,16 +14,15 @@ import SwiftUI
 struct OptimizeView: View {
     @StateObject private var runner = CommandRunner()
     @State private var preview = false
-    @State private var fdaRunAnyway = false
-    @State private var pendingRun: (() -> Void)? = nil
+    @State private var pendingRun: ((Bool) -> Void)? = nil
 
     var body: some View {
         if runner.phase == .idle {
             if pendingRun != nil {
                 FullDiskAccessRequired(
                     accent: Tool.optimize.accent,
-                    onRecheck: { if Privacy.hasFullDiskAccess() { runPending() } },
-                    onRunAnyway: { fdaRunAnyway = true; runPending() },
+                    onRecheck: { if Privacy.hasFullDiskAccess() { runPending(elevate: false) } },
+                    onRunAnyway: { runPending(elevate: true) },
                     onCancel: { pendingRun = nil })
             } else {
                 ToolHero(tool: .optimize, title: "Optimize", subtitle: Tool.optimize.tagline) {
@@ -78,11 +77,14 @@ struct OptimizeView: View {
         }
     }
 
-    private func guarded(_ work: @escaping () -> Void) {
-        if !fdaRunAnyway && !Privacy.hasFullDiskAccess() { pendingRun = work }
-        else { work() }
+    private func guarded(_ work: @escaping (Bool) -> Void) {
+        if Privacy.hasFullDiskAccess() { work(false) } else { pendingRun = work }
     }
-    private func runPending() { let r = pendingRun; pendingRun = nil; r?() }
-    private func runOptimize() { guarded { preview = false; runner.run(["optimize"], elevated: true, label: "Optimizing") } }
-    private func runPreview() { guarded { preview = true; runner.run(["optimize", "--dry-run"], label: "Optimize preview") } }
+    private func runPending(elevate: Bool) { let r = pendingRun; pendingRun = nil; r?(elevate) }
+
+    /// Optimize already runs elevated (root) → no flood, no gate.
+    private func runOptimize() { preview = false; runner.run(["optimize"], elevated: true, label: "Optimizing") }
+    private func runPreview() {
+        guarded { elevate in preview = true; runner.run(["optimize", "--dry-run"], elevated: elevate, label: "Optimize preview") }
+    }
 }
