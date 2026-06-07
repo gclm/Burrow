@@ -19,7 +19,7 @@ enum Tool: String, CaseIterable, Identifiable {
 
     /// Display order in the top nav. Cleanup family (clean → purge →
     /// installer → optimize) leads, then apps / analyze / status.
-    static let navOrder: [Tool] = [.clean, .purge, .installer, .apps, .optimize, .analyze, .status]
+    static let navOrder: [Tool] = [.clean, .purge, .installer, .optimize, .apps, .analyze, .status]
 
     /// Lowercase tab label (matches the instrument-panel voice).
     var label: String { rawValue }
