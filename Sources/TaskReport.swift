@@ -99,6 +99,9 @@ final class CommandRunner: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var lines: [String] = []
+    /// Set when the user aborts via `cancel()`, so the UI can say "Stopped"
+    /// rather than reporting the terminated process as a plain failure.
+    @Published private(set) var wasCancelled = false
 
     let opId = UUID()
     private var operationLabel: String?
@@ -109,7 +112,7 @@ final class CommandRunner: ObservableObject {
 
     func run(_ args: [String], elevated: Bool = false, label: String? = nil) {
         guard let mo = MoleCLI.findExecutable() else { phase = .failed("mo not found"); return }
-        lines = []; buffer = ""; phase = .running
+        lines = []; buffer = ""; wasCancelled = false; phase = .running
         operationLabel = label
         if let label { OperationCenter.shared.begin(opId, label: label) }
         if elevated { runElevated(mo: mo, args: args); return }
@@ -146,8 +149,13 @@ final class CommandRunner: ObservableObject {
     }
 
     func cancel() {
+        wasCancelled = true
         if let t = task, t.isRunning { t.terminate() }
         tailTimer?.invalidate(); tailTimer = nil
+        // If the process already exited (or never streamed), settle the UI
+        // immediately rather than waiting on a terminationHandler that may
+        // not fire for an already-dead task.
+        if task == nil || task?.isRunning == false { phase = .done(130) }
     }
 
     /// Run `mo <args>` as root via ONE osascript auth prompt, instead of

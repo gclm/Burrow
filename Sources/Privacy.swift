@@ -111,3 +111,47 @@ struct FullDiskAccessNotice: View {
         .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(accent.opacity(0.28), lineWidth: 1))
     }
 }
+
+/// Blocking gate shown when a flood-prone scan is requested without Full
+/// Disk Access. Unlike the soft banner, this STOPS the run — otherwise
+/// macOS prompts once per protected folder. Grant FDA once and the
+/// prompts stop entirely; "Scan anyway" is the escape hatch (and warns).
+struct FullDiskAccessRequired: View {
+    var accent: Color
+    var onOpenSettings: () -> Void = { Privacy.openFullDiskAccessSettings() }
+    var onRecheck: () -> Void
+    var onRunAnyway: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ZStack {
+                Circle().fill(accent.opacity(0.15)).frame(width: 64, height: 64)
+                Image(systemName: "lock.shield").font(.system(size: 28)).foregroundStyle(accent)
+            }
+            VStack(spacing: 8) {
+                Text("Grant Full Disk Access to scan")
+                    .font(Brand.serif(20, .medium)).foregroundStyle(Brand.textPrimary)
+                Text("This reads system and app caches through Mole. Without Full Disk Access, macOS makes you approve every protected folder — one prompt after another. Grant it once in System Settings and the prompts stop for good. Burrow only reads sizes; it never opens that data itself.")
+                    .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 440)
+            }
+            VStack(spacing: 12) {
+                PillButton(title: "Open Full Disk Access settings") { onOpenSettings() }
+                HStack(spacing: 18) {
+                    Button("I've granted it — scan") { onRecheck() }
+                        .buttonStyle(.plain).font(Brand.sans(12, .semibold)).foregroundStyle(accent)
+                    Button("Scan anyway") { onRunAnyway() }
+                        .buttonStyle(.plain).font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
+                    Button("Cancel") { onCancel() }
+                        .buttonStyle(.plain).font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
+                }
+            }
+            Spacer(); Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+    }
+}

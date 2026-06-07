@@ -15,31 +15,25 @@ import AppKit
 struct CleanView: View {
     @StateObject private var runner = CommandRunner()
     @State private var mode: Mode = .dry
-    @State private var showFDANotice = false
+    @State private var fdaRunAnyway = false
+    @State private var pendingRun: (() -> Void)? = nil
 
     enum Mode { case dry, real }
 
     var body: some View {
         if runner.phase == .idle {
-            ZStack(alignment: .top) {
+            if pendingRun != nil {
+                FullDiskAccessRequired(
+                    accent: Tool.clean.accent,
+                    onRecheck: { if Privacy.hasFullDiskAccess() { runPending() } },
+                    onRunAnyway: { fdaRunAnyway = true; runPending() },
+                    onCancel: { pendingRun = nil })
+            } else {
                 ToolHero(tool: .clean, title: "Clean", subtitle: Tool.clean.tagline) {
                     PillButton(title: "Clean Now") { confirmReal() }
                     PillButton(title: "Preview", filled: false) { startDry() }
                 }
-                if showFDANotice {
-                    FullDiskAccessNotice(
-                        accent: Tool.clean.accent,
-                        onContinue: { showFDANotice = false },
-                        onDontAskAgain: {
-                            Store.fullDiskAccessNoticeDismissed = true
-                            showFDANotice = false
-                        })
-                    .frame(maxWidth: 520)
-                    .padding(.horizontal, 18).padding(.top, 10)
-                    .transition(.opacity)
-                }
             }
-            .onAppear { showFDANotice = Privacy.shouldOfferFullDiskAccessNow() }
         } else {
             let report = parseTaskReport(runner.lines)
             VStack(spacing: 0) {
@@ -61,6 +55,12 @@ struct CleanView: View {
             if isRunning { ProgressView().controlSize(.small).tint(Tool.clean.accent) }
             Text(statusText).font(Brand.mono(12)).foregroundStyle(Brand.textSecondary)
             Spacer()
+            if isRunning {
+                Button { runner.cancel() } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                        .font(Brand.mono(11)).foregroundStyle(Brand.red)
+                }.buttonStyle(.plain)
+            }
             if isDone {
                 Button { startDry() } label: {
                     Label("Re-scan", systemImage: "arrow.clockwise")
@@ -93,23 +93,39 @@ struct CleanView: View {
     private var statusText: String {
         switch runner.phase {
         case .running: return mode == .dry ? "Scanning your Mac…" : "Cleaning… don't quit."
-        case .done:    return mode == .dry ? "Preview — review, then clean for real." : "Done — caches cleared."
+        case .done:    return runner.wasCancelled ? "Stopped."
+            : (mode == .dry ? "Preview — review, then clean for real." : "Done — caches cleared.")
         case .failed(let m): return "Failed: \(m)"
         case .idle:    return ""
         }
     }
 
-    private func startDry() { mode = .dry; runner.run(["clean", "--dry-run"], label: "Scanning caches") }
+    // MARK: - Full Disk Access gate
+
+    /// Run `work`, but if a flood-prone scan would hit the macOS per-folder
+    /// permission prompts (no Full Disk Access yet), divert to the gate
+    /// first instead of letting the flood happen.
+    private func guarded(_ work: @escaping () -> Void) {
+        if !fdaRunAnyway && !Privacy.hasFullDiskAccess() { pendingRun = work }
+        else { work() }
+    }
+    private func runPending() { let r = pendingRun; pendingRun = nil; r?() }
+
+    private func startDry() {
+        guarded { mode = .dry; runner.run(["clean", "--dry-run"], label: "Scanning caches") }
+    }
 
     private func confirmReal() {
-        let alert = NSAlert()
-        alert.messageText = "Clean caches for real?"
-        alert.informativeText = "Burrow will run `mo clean` with administrator rights. Cache files are removed permanently; Mole's whitelist and safety rules still apply."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Clean")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        mode = .real
-        runner.run(["clean"], elevated: true, label: "Cleaning caches")
+        guarded {
+            let alert = NSAlert()
+            alert.messageText = "Clean caches for real?"
+            alert.informativeText = "Burrow will run `mo clean` with administrator rights. Cache files are removed permanently; Mole's whitelist and safety rules still apply."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Clean")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            mode = .real
+            runner.run(["clean"], elevated: true, label: "Cleaning caches")
+        }
     }
 }
