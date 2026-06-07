@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import LocalAuthentication
 
 struct SettingsView: View {
     @State private var sampleIntervalSeconds: Int = Store.sampleIntervalSeconds
@@ -21,6 +22,7 @@ struct SettingsView: View {
     @State private var touchIDStatus = "—"
     @State private var touchIDEnabled = false
     @State private var touchIDBusy = false
+    @State private var touchIDAvailable = false
 
     /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
@@ -44,10 +46,12 @@ struct SettingsView: View {
 
                     section("Touch ID for sudo", "touchid") {
                         infoRow("Status", touchIDStatus)
-                        HStack {
-                            Spacer()
-                            if touchIDBusy { ProgressView().controlSize(.small).padding(.trailing, 4) }
-                            PillButton(title: touchIDEnabled ? "Disable" : "Enable", filled: false) { toggleTouchID() }
+                        if touchIDAvailable {
+                            HStack {
+                                Spacer()
+                                if touchIDBusy { ProgressView().controlSize(.small).padding(.trailing, 4) }
+                                PillButton(title: touchIDEnabled ? "Disable" : "Enable", filled: false) { toggleTouchID() }
+                            }
                         }
                         footnote("Lets `sudo` and admin prompts accept your fingerprint instead of a password, where macOS supports it. Configured via `mo touchid`; turning it on or off needs your password once.")
                     }
@@ -86,16 +90,29 @@ struct SettingsView: View {
 
     // MARK: - Touch ID for sudo
 
+    /// Whether this Mac actually has a Touch ID sensor. `mo touchid status`
+    /// only reports configured-vs-not (never hardware presence), so we ask
+    /// LocalAuthentication directly — biometryType is .touchID only on Macs
+    /// with the sensor (set after a canEvaluatePolicy probe, even if no
+    /// finger is enrolled yet).
+    private func touchIDHardwarePresent() -> Bool {
+        let ctx = LAContext()
+        var err: NSError?
+        _ = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
+        return ctx.biometryType == .touchID
+    }
+
     private func loadTouchIDStatus() {
+        let available = touchIDHardwarePresent()
         DispatchQueue.global(qos: .userInitiated).async {
             let res = try? MoleCLI.run(args: ["touchid", "status"], timeout: 15)
-            let out = (res?.stdout ?? "").lowercased()
-            let unavailable = out.contains("not available") || out.contains("no touch id")
-                || out.contains("not supported") || out.contains("no biometric")
+            // Strip ANSI colour codes Mole wraps the status line in before matching.
+            let out = CommandRunner.stripAnsi(res?.stdout ?? "").lowercased()
             let enabled = out.contains("is enabled")
             DispatchQueue.main.async {
+                touchIDAvailable = available
                 touchIDEnabled = enabled
-                touchIDStatus = unavailable ? "Not available on this Mac"
+                touchIDStatus = !available ? "Not available on this Mac"
                     : (out.isEmpty ? "Unknown" : (enabled ? "Enabled" : "Disabled"))
             }
         }
