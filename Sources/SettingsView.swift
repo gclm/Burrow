@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var retentionDays: Int = Store.retentionDays
     @State private var autoVacuum: Bool = Store.autoVacuum
     @State private var queryServerEnabled: Bool = Store.queryServerEnabled
+    @State private var showMenuBarIcon: Bool = Store.showMenuBarIcon
     @State private var dbSizeText: String = "—"
     @State private var lastMaintenanceText: String = "—"
 
@@ -55,6 +56,11 @@ struct SettingsView: View {
                             Store.sampleIntervalSeconds = $0
                         }
                         footnote("Burrow runs `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
+                    }
+
+                    section("Menu bar", "menubar.rectangle") {
+                        toggleRow("Show menu bar icon", isOn: $showMenuBarIcon) { Store.showMenuBarIcon = $0 }
+                        footnote("When off, Burrow shows a Dock icon instead so it stays reachable — the window opens on launch and a Dock click reopens it. Takes effect after a relaunch.")
                     }
 
                     section("MCP query server", "antenna.radiowaves.left.and.right") {

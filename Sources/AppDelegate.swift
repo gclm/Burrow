@@ -79,8 +79,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.maintenance = maintenance
         maintenance.start()
 
-        self.statusBar = StatusBarController(db: db, sampler: sampler, delegate: self)
+        if Store.showMenuBarIcon {
+            self.statusBar = StatusBarController(db: db, sampler: sampler, delegate: self)
+        }
         self.setupMainMenu()
+
+        // Without the menu-bar icon there's no agent entry point (the app is
+        // LSUIElement, so no Dock icon either). Run as a regular Dock app and
+        // open the window on launch so it stays reachable (issue #4).
+        if !Store.showMenuBarIcon, #available(macOS 14, *) {
+            NSApp.setActivationPolicy(.regular)
+            self.openMainWindow(initial: .tool(.status))
+        }
 
         // Dev affordance: launch with BURROW_OPEN_ON_LAUNCH=1 to pop the
         // main window straight away (used for screenshot/verify loops).
@@ -162,8 +172,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Window delegate
 
     func windowWillClose(_ notification: Notification) {
-        // Dashboard closed → back to a pure menu-bar agent (no Dock icon).
-        NSApp.setActivationPolicy(.accessory)
+        // Retreat to a pure menu-bar agent only when the menu-bar icon is
+        // the entry point. With it disabled, keep the Dock icon so the app
+        // stays reachable after the window closes (issue #4).
+        if Store.showMenuBarIcon {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    /// Clicking the Dock icon (menu-bar-disabled mode) reopens the window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows, #available(macOS 14, *) {
+            self.openMainWindow(initial: .tool(.status))
+        }
+        return true
     }
 
     // MARK: - Main menu
