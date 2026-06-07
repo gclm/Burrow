@@ -18,6 +18,9 @@ struct SettingsView: View {
     @State private var queryServerEnabled: Bool = Store.queryServerEnabled
     @State private var dbSizeText: String = "—"
     @State private var lastMaintenanceText: String = "—"
+    @State private var touchIDStatus = "—"
+    @State private var touchIDEnabled = false
+    @State private var touchIDBusy = false
 
     /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
@@ -37,6 +40,16 @@ struct SettingsView: View {
                             }
                         }
                         footnote("History lives at ~/Library/Application Support/Burrow/burrow.db. Rows past the retention window are pruned hourly.")
+                    }
+
+                    section("Touch ID for sudo", "touchid") {
+                        infoRow("Status", touchIDStatus)
+                        HStack {
+                            Spacer()
+                            if touchIDBusy { ProgressView().controlSize(.small).padding(.trailing, 4) }
+                            PillButton(title: touchIDEnabled ? "Disable" : "Enable", filled: false) { toggleTouchID() }
+                        }
+                        footnote("Lets `sudo` and admin prompts accept your fingerprint instead of a password, where macOS supports it. Configured via `mo touchid`; turning it on or off needs your password once.")
                     }
 
                     section("History retention", "calendar") {
@@ -68,7 +81,43 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
             }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { refreshStatusLabels() }
+        .onAppear { refreshStatusLabels(); loadTouchIDStatus() }
+    }
+
+    // MARK: - Touch ID for sudo
+
+    private func loadTouchIDStatus() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let res = try? MoleCLI.run(args: ["touchid", "status"], timeout: 15)
+            let out = (res?.stdout ?? "").lowercased()
+            let unavailable = out.contains("not available") || out.contains("no touch id")
+                || out.contains("not supported") || out.contains("no biometric")
+            let enabled = out.contains("is enabled")
+            DispatchQueue.main.async {
+                touchIDEnabled = enabled
+                touchIDStatus = unavailable ? "Not available on this Mac"
+                    : (out.isEmpty ? "Unknown" : (enabled ? "Enabled" : "Disabled"))
+            }
+        }
+    }
+
+    private func toggleTouchID() {
+        guard !touchIDBusy else { return }
+        touchIDBusy = true
+        let cmd = touchIDEnabled ? "disable" : "enable"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let code = MoleCLI.runElevated(args: ["touchid", cmd])
+            DispatchQueue.main.async {
+                touchIDBusy = false
+                loadTouchIDStatus()
+                if code != 0 {
+                    let alert = NSAlert()
+                    alert.messageText = "Couldn't update Touch ID for sudo"
+                    alert.informativeText = "`mo touchid \(cmd)` didn't complete (the password prompt may have been cancelled). You can also run it in a terminal."
+                    alert.runModal()
+                }
+            }
+        }
     }
 
     // MARK: - Section + row helpers
