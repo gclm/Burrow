@@ -21,6 +21,21 @@ struct SettingsView: View {
     @State private var lastMaintenanceText: String = "—"
     @State private var moleVersion: String = "—"
     @State private var moleUpdating = false
+    @State private var copiedConfig = false
+
+    /// Drop-in MCP config for Claude Code / Cursor / Codex / Cline — they
+    /// all share the same `{command, args}` stdio shape, so one snippet
+    /// covers every agent.
+    private let mcpConfigJSON = """
+    {
+      "mcpServers": {
+        "burrow": {
+          "command": "/Applications/Burrow.app/Contents/MacOS/Burrow",
+          "args": ["--mcp"]
+        }
+      }
+    }
+    """
 
     /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
@@ -70,10 +85,28 @@ struct SettingsView: View {
                         footnote("Burrow runs `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
                     }
 
-                    section("MCP query server", "antenna.radiowaves.left.and.right") {
-                        toggleRow("Enable MCP query server", isOn: $queryServerEnabled) { Store.queryServerEnabled = $0 }
+                    section("Ask your AI about your Mac (MCP)", "sparkles") {
+                        Text("Burrow exposes your Mac's recorded history to coding agents — Claude Code, Cursor, Codex, Cline — over MCP. Add the config below, then ask in plain language. The server starts on demand over stdio; there's no port and no always-on listener.")
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        codeBlock(mcpConfigJSON)
+
+                        infoRow("Tools", "burrow_snapshot · _history · _top_processes · _info")
+
+                        subLabel("Try asking")
+                        promptRow("What's my Mac's CPU and memory usage right now?")
+                        promptRow("Show the CPU trend over the last 2 hours.")
+                        promptRow("Which apps spiked CPU in the last 30 minutes?")
+                        promptRow("Is Burrow collecting data? When was the last sample?")
+
+                        footnote("Config path is your agent's MCP settings (e.g. ~/.claude/settings.json). Read-only: agents can query history but never write or run cleanups. Data stays on this Mac.")
+                    }
+
+                    section("Local HTTP query server", "antenna.radiowaves.left.and.right") {
+                        toggleRow("Enable HTTP query server", isOn: $queryServerEnabled) { Store.queryServerEnabled = $0 }
                         infoRow("Endpoint", "127.0.0.1:\(Store.queryServerPort)")
-                        footnote("Toggle + port changes take effect after a relaunch. Exposes /health, /info, /snapshot, /metrics over localhost, plus the `Burrow --mcp` stdio server for Claude Code.")
+                        footnote("Optional REST surface for dashboards or curl: /health, /info, /snapshot, /metrics over localhost. Separate from the MCP stdio server above; toggle + port changes take effect after a relaunch.")
                     }
                 }
                 .padding(22)
@@ -136,6 +169,74 @@ struct SettingsView: View {
     private func footnote(_ text: String) -> some View {
         Text(NSLocalizedString(text, comment: "")).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Small all-caps section sub-heading (e.g. "TRY ASKING").
+    private func subLabel(_ text: String) -> some View {
+        Text(text.uppercased()).font(Brand.mono(9, .bold)).tracking(0.6)
+            .foregroundStyle(Brand.textTertiary).padding(.top, 2)
+    }
+
+    /// One example prompt with a one-click copy button (the text isn't
+    /// selectable, so the button is the only way to grab it).
+    private func promptRow(_ text: String) -> some View { PromptRow(text: text) }
+
+    private struct PromptRow: View {
+        let text: String
+        @State private var copied = false
+        @State private var hovering = false
+
+        var body: some View {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "arrow.right").font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Brand.green).accessibilityHidden(true)
+                Text("\u{201C}\(text)\u{201D}").font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 6)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { copied = false }
+                } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10))
+                        .foregroundStyle(copied ? Brand.green : (hovering ? Brand.textSecondary : Brand.textTertiary))
+                }
+                .buttonStyle(.plain)
+                .help("Copy prompt")
+                .accessibilityLabel("Copy prompt")
+            }
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+        }
+    }
+
+    /// Monospace config block with a one-click copy button.
+    private func codeBlock(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text).font(Brand.mono(10)).foregroundStyle(Brand.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copiedConfig = true
+                    // Reset the label so a later copy confirms again.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copiedConfig = false }
+                } label: {
+                    Label(copiedConfig ? "Copied" : "Copy config",
+                          systemImage: copiedConfig ? "checkmark" : "doc.on.doc")
+                        .font(Brand.mono(10)).foregroundStyle(Brand.green)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.25)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
     }
 
     private func toggleRow(_ label: String, isOn: Binding<Bool>, onChange: @escaping (Bool) -> Void) -> some View {
