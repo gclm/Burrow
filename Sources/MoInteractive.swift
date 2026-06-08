@@ -169,7 +169,8 @@ final class PTYTask {
     var terminationStatus: Int32 { proc.terminationStatus }
     var onExit: (@Sendable () -> Void)?
 
-    func launch(_ executable: String, _ args: [String], cols: UInt16 = 120, rows: UInt16 = 60) throws {
+    func launch(_ executable: String, _ args: [String], env extra: [String: String] = [:],
+                cols: UInt16 = 120, rows: UInt16 = 60) throws {
         var amaster: Int32 = 0
         var aslave: Int32 = 0
         var ws = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
@@ -185,6 +186,7 @@ final class PTYTask {
         proc.standardError = slave
         var env = Foundation.ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
+        for (k, v) in extra { env[k] = v }
         proc.environment = env
         proc.terminationHandler = { [weak self] _ in self?.onExit?() }
         master = FileHandle(fileDescriptor: amaster, closeOnDealloc: true)
