@@ -48,9 +48,11 @@ struct TaskGroup: Identifiable {
 }
 
 struct TaskSummary {
-    let space: String      // "383.8MB"
-    let items: String      // "372"
-    let categories: String // "20"
+    let space: String          // "383.8MB" — potential (dry-run) or tracked (real) cleanup size
+    let items: String          // "372"
+    let categories: String     // "20"
+    var freeChange: String = "" // "+1.39GB" — real run only (disk freed)
+    var freeNow: String = ""    // "2.50GB"  — real run only (free space after)
 }
 
 enum TaskReportText {
@@ -144,8 +146,14 @@ private extension String {
 
 func parseTaskReport(_ lines: [String]) -> (groups: [TaskGroup], summary: TaskSummary?) {
     var groups: [TaskGroup] = []
-    var summary: TaskSummary?
     let markerChars: Set<Character> = ["→", "➜", "✓", "✔", "•", "◎", "●", "✗", "✘", "✕", "ℹ", "☞"]
+
+    // Summary fields accumulate across lines: the dry-run preview packs
+    // them onto one "Potential space:" line, but the real run spreads
+    // "Tracked cleanup:", "Free space change:" and "Free space now:" over
+    // three separate lines.
+    var space = "", items = "", cats = "", freeChange = "", freeNow = ""
+    var sawSummary = false
 
     for raw in lines {
         let t = raw.trimmingCharacters(in: .whitespaces)
@@ -158,27 +166,46 @@ func parseTaskReport(_ lines: [String]) -> (groups: [TaskGroup], summary: TaskSu
             let text = String(t.dropFirst()).trimmingCharacters(in: .whitespaces)
             if groups.isEmpty { groups.append(TaskGroup(title: "Summary", items: [])) }
             groups[groups.count - 1].items.append(TaskItem(marker: TaskMarker(first), text: text))
-        } else if t.hasPrefix("Potential space:") {
-            summary = parseSummary(t)
+        } else if mergeSummaryFields(line: t, space: &space, items: &items, categories: &cats,
+                                     freeChange: &freeChange, freeNow: &freeNow) {
+            sawSummary = true
         } else if t == t.uppercased(), t.count > 4, t.count < 40, !t.contains(":"), !t.contains("|") {
             groups.append(TaskGroup(title: t.capitalized, items: []))
         }
     }
+    let summary = sawSummary
+        ? TaskSummary(space: space, items: items, categories: cats,
+                      freeChange: freeChange, freeNow: freeNow)
+        : nil
     return (groups.filter { !$0.items.isEmpty }, summary)
 }
 
-private func parseSummary(_ line: String) -> TaskSummary {
-    var space = "", items = "", cats = ""
+/// Recognise a summary line from either the dry-run preview ("Potential
+/// space: … | Items: … | Categories: …") or the real run's footer
+/// ("Tracked cleanup: …", "Free space change: …", "Free space now: …")
+/// and merge its fields into the accumulators. Returns whether the line
+/// was a summary line, so the caller stops matching other shapes for it.
+private func mergeSummaryFields(line: String,
+                                space: inout String, items: inout String,
+                                categories: inout String,
+                                freeChange: inout String, freeNow: inout String) -> Bool {
+    let lower = line.lowercased()
+    guard lower.contains("potential space") || lower.contains("tracked cleanup")
+       || lower.contains("free space change") || lower.contains("free space now") else {
+        return false
+    }
     for part in line.components(separatedBy: "|") {
         let kv = part.components(separatedBy: ":")
         guard kv.count >= 2 else { continue }
         let key = kv[0].trimmingCharacters(in: .whitespaces).lowercased()
-        let val = kv[1].trimmingCharacters(in: .whitespaces)
-        if key.contains("space") { space = val }
+        let val = kv[1...].joined(separator: ":").trimmingCharacters(in: .whitespaces)
+        if key.contains("potential space") || key.contains("tracked cleanup") { space = val }
+        else if key.contains("free space change") { freeChange = val }
+        else if key.contains("free space now") { freeNow = val }
         else if key.contains("item") { items = val }
-        else if key.contains("categor") { cats = val }
+        else if key.contains("categor") { categories = val }
     }
-    return TaskSummary(space: space, items: items, categories: cats)
+    return true
 }
 
 // MARK: - Streaming runner

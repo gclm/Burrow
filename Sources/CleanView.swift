@@ -39,16 +39,25 @@ struct CleanView: View {
                 Rectangle().fill(Brand.hairline).frame(height: 1)
                 if isDone, mode == .real {
                     DoneBanner(accent: Tool.clean.accent, title: "Cleaned",
-                               detail: runner.summary.map {
-                                   String(format: NSLocalizedString("Freed up to %@ · %@ items", comment: ""),
-                                          $0.space, $0.items)
-                               })
+                               detail: runner.summary.map(cleanedDetail))
                 } else if mode == .dry, let s = runner.summary {
                     summaryBanner(s)
                 }
                 TaskReportView(groups: runner.groups, accent: Tool.clean.accent)
             }
         }
+    }
+
+    /// Post-run detail line. Prefers the real freed-space numbers Mole
+    /// prints after a live clean ("Free space change / now"), falling
+    /// back to the tracked-cleanup size when those aren't present.
+    private func cleanedDetail(_ s: TaskSummary) -> String {
+        var parts: [String] = []
+        if !s.freeChange.isEmpty { parts.append("Freed \(s.freeChange)") }
+        else if !s.space.isEmpty { parts.append("Cleaned \(s.space)") }
+        if !s.freeNow.isEmpty { parts.append("\(s.freeNow) free now") }
+        if !s.items.isEmpty { parts.append("\(s.items) items") }
+        return parts.isEmpty ? "Done" : parts.joined(separator: " · ")
     }
 
     private var statusBar: some View {
