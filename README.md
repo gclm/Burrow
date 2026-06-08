@@ -23,21 +23,35 @@ and an **MCP server** so any AI agent (Claude Code, Cursor, Codex…) can ask
 
 <table>
   <tr>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/1b0c402e-430c-4a15-ba90-195a050bf29a"></td>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/2b523363-cdc3-4a04-b858-67066fc95df4"></td>
+    <td><img alt="Status — live CPU, memory, GPU, disk, network, and battery with sparklines" src="https://github.com/user-attachments/assets/c9dcc792-7855-42bc-8799-fdd5b5c2d6c9"></td>
+    <td><img alt="Analyze — squarified treemap of your whole disk" src="https://github.com/user-attachments/assets/86d91205-0656-43a8-9c5d-5b966e05ea35"></td>
   </tr>
   <tr>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/fda0b2e3-8bbd-42fe-b53c-12e18cdf5cf7"></td>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/0e59ba40-9bca-4483-8980-f03afcfad340"></td>
+    <td><img alt="Clean — categorized cache, log, and leftover removal" src="https://github.com/user-attachments/assets/b773858e-98b8-4465-8916-914699d2b3e8"></td>
+    <td><img alt="Purge — reclaim space from dev projects (node_modules, build dirs, target/…)" src="https://github.com/user-attachments/assets/7b956080-31b6-487f-b886-bf362dfe77b8"></td>
   </tr>
   <tr>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/5194a214-4d2c-4a6a-ad92-c22046e5005f"></td>
-    <td><img alt="Burrow" src="https://github.com/user-attachments/assets/40cc40cb-73ba-486a-ba15-356c032e6e04"></td>
+    <td><img alt="Installers — find and remove leftover .dmg/.pkg files in bulk" src="https://github.com/user-attachments/assets/d8bd92dc-3f7e-4bcc-94bd-ee08660208e5"></td>
+    <td><img alt="Optimize — one-tap safe maintenance" src="https://github.com/user-attachments/assets/9c45a85e-3f1c-4fe7-96cc-db08605cb663"></td>
+  </tr>
+  <tr>
+    <td><img alt="Software — installed apps with search, sort, and multi-select uninstall" src="https://github.com/user-attachments/assets/61f20645-4650-499e-b323-d4b780d5e020"></td>
+    <td><img alt="History — long-range charts over a local SQLite metric history" src="https://github.com/user-attachments/assets/38e2de8e-e654-4eab-a20a-f4521c921f31"></td>
   </tr>
 </table>
 
 <p align="center">
-  <img width="320" alt="Menu-bar HUD" src="https://github.com/user-attachments/assets/515c2c8f-0332-4e8b-b880-2f2369ccb544">
+  <img alt="Activity — a running log of cleans, optimizes, and scans, plus anything in flight" src="https://github.com/user-attachments/assets/766f5904-ebf1-4c16-9709-afc587575f1c">
+</p>
+
+<p align="center">
+  <em>Explain with AI — point an MCP-capable agent (Claude Code, or a local model via LM Studio) at Burrow and ask your Mac in plain language.</em>
+  <br>
+  <img alt="Explain with AI — burrow_snapshot analyzed in plain language" src="https://github.com/user-attachments/assets/a4255b75-7d93-4412-bc22-ba3c996b5b3b">
+</p>
+
+<p align="center">
+  <img width="320" alt="Menu-bar HUD — health, metric tiles, top processes, and live job status" src="https://github.com/user-attachments/assets/0e7d0684-88eb-4df4-998e-d6d1664e3eb3">
 </p>
 
 ## The tools

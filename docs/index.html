@@ -120,10 +120,10 @@
   code.k, .cmd { font-family: var(--mono); font-size: 0.86em; background: rgba(243,236,221,0.08); padding: 1px 6px; border-radius: 5px; color: var(--ink); }
 
   /* ---------- 00 See it ---------- */
-  .demo-panel { margin-top: 6px; border-radius: 16px; overflow: hidden; background: #0B0907;
+  .demo-panel { position: relative; margin-top: 6px; border-radius: 16px; overflow: hidden; background: #0B0907;
     border: 1px solid var(--hair); aspect-ratio: 16 / 10; display: grid; place-items: center;
     box-shadow: 0 40px 80px -52px rgba(0,0,0,0.85); }
-  .demo-panel img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+  .demo-panel img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
   .demo-panel img.contain { object-fit: contain; padding: 22px; }
   .demo-foot { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 22px; }
   .demo-now { display: flex; align-items: baseline; gap: 12px; min-width: 240px; }
@@ -264,19 +264,23 @@
       </p>
     </div>
 
-    <div class="demo-panel"><img id="demoImg" src="assets/shot-02691860.png" alt="Burrow — Analyze treemap"></div>
+    <div class="demo-panel"><img id="demoImg" src="assets/shot-analyze.png" alt="Burrow — Analyze treemap"></div>
     <div class="demo-foot">
       <div class="demo-now">
         <span class="name" id="demoName">Analyze</span>
         <span class="tag" id="demoTag">Map every chamber below.</span>
       </div>
       <div class="demo-tabs" role="tablist">
-        <button class="pill" role="tab" data-img="assets/shot-02691936.png" data-name="Clean"    data-tag="Fresh air through old tunnels.">Clean</button>
-        <button class="pill" role="tab" data-img="assets/shot-02692491.png" data-name="Software" data-tag="Shed what you've outgrown.">Software</button>
-        <button class="pill" role="tab" data-img="assets/shot-02691981.png" data-name="Optimize" data-tag="Small turns, a smoother run.">Optimize</button>
-        <button class="pill" role="tab" data-img="assets/shot-02691860.png" data-name="Analyze"  data-tag="Map every chamber below." aria-selected="true">Analyze</button>
-        <button class="pill" role="tab" data-img="assets/shot-02692296.png" data-name="History"  data-tag="A long memory of the den.">History</button>
-        <button class="pill" role="tab" data-img="assets/shot-02691645.png" data-name="Menu&nbsp;bar" data-tag="The whole den, from the menu bar." data-contain="1">Menu&nbsp;bar</button>
+        <button class="pill" role="tab" data-img="assets/shot-clean.png"      data-name="Clean"      data-tag="Fresh air through old tunnels.">Clean</button>
+        <button class="pill" role="tab" data-img="assets/shot-purge2.png"     data-name="Purge"      data-tag="Clear the diggings dev work leaves behind.">Purge</button>
+        <button class="pill" role="tab" data-img="assets/shot-installers.png" data-name="Installers" data-tag="Sweep out the crates you unpacked.">Installers</button>
+        <button class="pill" role="tab" data-img="assets/shot-optimize.png"   data-name="Optimize"   data-tag="Small turns, a smoother run.">Optimize</button>
+        <button class="pill" role="tab" data-img="assets/shot-apps.png"       data-name="Software"   data-tag="Shed what you've outgrown.">Software</button>
+        <button class="pill" role="tab" data-img="assets/shot-analyze.png"    data-name="Analyze"    data-tag="Map every chamber below." aria-selected="true">Analyze</button>
+        <button class="pill" role="tab" data-img="assets/shot-status.png"     data-name="Status"     data-tag="Every pulse of the den.">Status</button>
+        <button class="pill" role="tab" data-img="assets/shot-history.png"    data-name="History"    data-tag="A long memory of the den.">History</button>
+        <button class="pill" role="tab" data-img="assets/shot-ai.png"         data-name="Agent"      data-tag="Ask your Mac, from Claude." data-contain="1">Agent</button>
+        <button class="pill" role="tab" data-img="assets/shot-menubar.png"    data-name="Menu&nbsp;bar" data-tag="The whole den, from the menu bar." data-contain="1">Menu&nbsp;bar</button>
       </div>
     </div>
   </section>
