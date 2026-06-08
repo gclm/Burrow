@@ -153,8 +153,8 @@ jobs:
           GH_TOKEN: ${{ secrets.TAP_PAT }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::TAP_PAT secret is not set — cask not bumped. Release is published; add the secret and re-run, or bump Casks/burrow.rb by hand."
-            exit 1
+            echo "::warning::TAP_PAT secret is not set — the GitHub release IS published, but the Homebrew cask was NOT bumped. Add the secret to automate it, or bump Casks/burrow.rb by hand. Not failing the release for this."
+            exit 0
           fi
           VERSION="${{ steps.build.outputs.version }}"
           SHA="${{ steps.pkg.outputs.sha }}"
