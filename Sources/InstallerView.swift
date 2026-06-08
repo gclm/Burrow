@@ -41,10 +41,18 @@ final class MoInteractiveRunner: ObservableObject {
 
     init(subcommand: String, title: String) { self.subcommand = subcommand; self.title = title }
 
+    /// A distinctive sudo prompt string we can recognise in the PTY. If we see
+    /// it, sudo has fallen through to a tty PASSWORD prompt — i.e. Touch ID for
+    /// sudo isn't set up. We never answer it (Burrow must not render a password
+    /// box); we bail and point the user at Full Disk Access instead.
+    private static let sudoPrompt = "BURROW-NEEDS-SUDO-AUTH"
+
     /// (Re)start the scan from a clean slate. When `elevated`, run `mo` as root
     /// via `sudo` — root bypasses TCC, so it scans Downloads/Desktop/project
     /// dirs WITHOUT the per-folder permission flood. `--preserve-env=HOME` keeps
-    /// your home (not root's) so mo scans the right directories.
+    /// your home (not root's) so mo scans the right directories. Auth is the
+    /// NATIVE sudo flow only: Touch ID for sudo shows Apple's own sheet (with
+    /// its own password field). Burrow never renders a password prompt.
     func start(elevated: Bool = false) {
         guard let mo = MoleCLI.findExecutable() else { phase = .failed("mo not found"); return }
         self.elevated = elevated
@@ -60,8 +68,8 @@ final class MoInteractiveRunner: ObservableObject {
         do {
             if elevated {
                 try pty.launch("/usr/bin/sudo",
-                               ["-A", "--preserve-env=HOME", mo, subcommand],
-                               env: ["SUDO_ASKPASS": Self.askpassScript(), "HOME": NSHomeDirectory()])
+                               ["-p", Self.sudoPrompt, "--preserve-env=HOME", mo, subcommand],
+                               env: ["HOME": NSHomeDirectory()])
             } else {
                 try pty.launch(mo, [subcommand])
             }
@@ -74,28 +82,6 @@ final class MoInteractiveRunner: ObservableObject {
     }
 
     func rescan() { start(elevated: elevated) }
-
-    /// Write a one-shot askpass helper for `sudo -A`: it pops the macOS secure
-    /// password dialog and prints the result. (If Touch ID for sudo is on, sudo
-    /// uses that and never calls this.) Returns the script path.
-    private static func askpassScript() -> String {
-        let path = NSTemporaryDirectory() + "burrow-askpass.sh"
-        let script = """
-        #!/bin/sh
-        /usr/bin/osascript <<'APPLESCRIPT'
-        try
-          set r to display dialog "Enter your login password so Burrow can scan with administrator rights (skips the macOS per-folder permission prompts)." default answer "" with hidden answer with title "Burrow — Scan with admin" buttons {"Cancel", "OK"} default button "OK"
-          if button returned of r is "OK" then
-            return text returned of r
-          end if
-        end try
-        return ""
-        APPLESCRIPT
-        """
-        try? script.write(toFile: path, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
-        return path
-    }
 
     /// Apply selection: toggle the wanted rows, then poll the screen until the
     /// redraw settles and confirm ONLY if the checked rows match the wanted
@@ -195,6 +181,14 @@ final class MoInteractiveRunner: ObservableObject {
         if confirmed { result += s; return }
         if pressedProceed { confirmScreen += s; return }   // Mole's "Remove N?" screen
         screen += s
+        // Elevated run fell through to a tty PASSWORD prompt → Touch ID for sudo
+        // isn't configured. Never answer it with our own box — bail with guidance.
+        if elevated, !listReady, screen.contains(Self.sudoPrompt) {
+            pty.master?.readabilityHandler = nil
+            pty.terminate()
+            phase = .failed("\u{201C}Scan with admin\u{201D} uses Touch ID for sudo, which isn't set up. Enable it in Settings → Touch ID for sudo, or use \u{201C}Open Full Disk Access settings\u{201D} to scan without admin (one grant, no password). Nothing was scanned.")
+            return
+        }
         if !listReady, screen.contains("Enter"), screen.contains("Confirm") {
             let parsed = MoTUI.parse(screen)
             if !parsed.items.isEmpty {
