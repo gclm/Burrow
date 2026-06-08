@@ -17,7 +17,8 @@
 //
 
 import Foundation
-import Darwin   // openpty, winsize
+import Darwin    // openpty, winsize
+import Security  // AuthorizationExecuteWithPrivileges (root scan)
 
 // MARK: - Parsed TUI model
 
@@ -156,21 +157,35 @@ enum MoTUI {
     }
 }
 
-// MARK: - Pseudo-terminal task
+// MARK: - Transport (bridges mo's terminal; as the user, or as root)
+
+/// What `MoInteractiveRunner` needs from whatever is bridging mo's terminal:
+/// streamed output (`onData`, on a background queue), an exit signal
+/// (`onExit`), and a way to type (`send`) / stop reading / kill it. Two
+/// implementations:
+///   • `PTYTask`           — runs mo as the user in a pty.
+///   • `PrivilegedSession` — runs mo as ROOT via the system auth dialog, so it
+///     sits OUTSIDE Burrow's TCC responsibility chain (no per-folder flood).
+protocol MoTransport: AnyObject {
+    var onData: ((String) -> Void)? { get set }
+    var onExit: (@Sendable () -> Void)? { get set }
+    var terminationStatus: Int32 { get }
+    func send(_ bytes: [UInt8])
+    func stopReading()
+    func terminate()
+}
 
 /// A child process attached to a pseudo-terminal, so a TUI program (Mole's
-/// selection screen) believes it's interactive. Read/write the screen via
-/// `master`. The only impure seam — kept tiny.
-final class PTYTask {
+/// selection screen) believes it's interactive.
+final class PTYTask: MoTransport {
     private let proc = Process()
-    private(set) var master: FileHandle?
+    private var master: FileHandle?
 
-    var isRunning: Bool { proc.isRunning }
-    var terminationStatus: Int32 { proc.terminationStatus }
+    var onData: ((String) -> Void)?
     var onExit: (@Sendable () -> Void)?
+    var terminationStatus: Int32 { proc.terminationStatus }
 
-    func launch(_ executable: String, _ args: [String], env extra: [String: String] = [:],
-                cols: UInt16 = 120, rows: UInt16 = 60) throws {
+    func launch(_ executable: String, _ args: [String], cols: UInt16 = 120, rows: UInt16 = 60) throws {
         var amaster: Int32 = 0
         var aslave: Int32 = 0
         var ws = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
@@ -186,10 +201,15 @@ final class PTYTask {
         proc.standardError = slave
         var env = Foundation.ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
-        for (k, v) in extra { env[k] = v }
         proc.environment = env
         proc.terminationHandler = { [weak self] _ in self?.onExit?() }
-        master = FileHandle(fileDescriptor: amaster, closeOnDealloc: true)
+        let mh = FileHandle(fileDescriptor: amaster, closeOnDealloc: true)
+        master = mh
+        mh.readabilityHandler = { [weak self] h in
+            let d = h.availableData
+            guard !d.isEmpty else { return }
+            self?.onData?(String(decoding: d, as: UTF8.self))
+        }
         // Close the parent's slave fd whether or not the launch succeeds — on a
         // throw the child never starts, so nothing else would ever close it.
         do { try proc.run() }
@@ -198,5 +218,90 @@ final class PTYTask {
     }
 
     func send(_ bytes: [UInt8]) { try? master?.write(contentsOf: Data(bytes)) }
-    func terminate() { if proc.isRunning { proc.terminate() } }
+    func stopReading() { master?.readabilityHandler = nil }
+    func terminate() { master?.readabilityHandler = nil; if proc.isRunning { proc.terminate() } }
+}
+
+/// Runs `mo` as ROOT via AuthorizationServices — the SAME system-auth Clean
+/// uses (native dialog, Touch ID; the tool is launched outside Burrow's
+/// responsibility chain, so TCC doesn't prompt per folder). `/usr/bin/script`
+/// gives mo a real pty so its checklist still renders, and we set `HOME` so it
+/// scans the user's dirs, not root's.
+///
+/// `AuthorizationExecuteWithPrivileges` is long-"deprecated" but functional and
+/// needs no code-signing; there's no non-deprecated API that returns a live
+/// bidirectional pipe to a root child. `launch` BLOCKS on the auth dialog — run
+/// it off the main thread.
+final class PrivilegedSession: MoTransport {
+    var onData: ((String) -> Void)?
+    var onExit: (@Sendable () -> Void)?
+    private(set) var terminationStatus: Int32 = 0
+
+    private var authRef: AuthorizationRef?
+    private var file: UnsafeMutablePointer<FILE>?
+    private var master: FileHandle?
+
+    func launch(mo: String, subcommand: String, home: String) throws {
+        var auth: AuthorizationRef?
+        guard AuthorizationCreate(nil, nil, [], &auth) == errAuthorizationSuccess, let auth else {
+            throw NSError(domain: "burrow.priv", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Couldn't start authorization."])
+        }
+        authRef = auth
+
+        // script -q /dev/null /bin/sh -c "HOME='…' exec '…/mo' <sub>"
+        func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let inner = "HOME=\(q(home)) exec \(q(mo)) \(subcommand)"
+        let argStrings = ["-q", "/dev/null", "/bin/sh", "-c", inner]
+        var cArgs: [UnsafeMutablePointer<CChar>?] = argStrings.map { strdup($0) }
+        cArgs.append(nil)
+        defer { for p in cArgs { free(p) } }   // AEWP exec'd a copy; safe to free after
+
+        // AuthorizationExecuteWithPrivileges is marked UNAVAILABLE to Swift but is
+        // still a live symbol in Security.framework — fetch it via dlsym. It's the
+        // only API that returns a live bidirectional pipe to a root child without
+        // a code-signed helper.
+        typealias AEWP = @convention(c) (
+            AuthorizationRef, UnsafePointer<CChar>, AuthorizationFlags,
+            UnsafePointer<UnsafeMutablePointer<CChar>?>?, UnsafeMutablePointer<UnsafeMutablePointer<FILE>?>?
+        ) -> OSStatus
+        guard let sym = dlsym(dlopen(nil, RTLD_LAZY), "AuthorizationExecuteWithPrivileges") else {
+            AuthorizationFree(auth, []); authRef = nil
+            throw NSError(domain: "burrow.priv", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Privileged execution isn't available on this system."])
+        }
+        let aewp = unsafeBitCast(sym, to: AEWP.self)
+
+        var pipe: UnsafeMutablePointer<FILE>?
+        let rc = "/usr/bin/script".withCString { tool -> OSStatus in
+            cArgs.withUnsafeMutableBufferPointer { buf -> OSStatus in
+                aewp(auth, tool, [], buf.baseAddress, &pipe)
+            }
+        }
+        guard rc == errAuthorizationSuccess, let pipe else {
+            AuthorizationFree(auth, []); authRef = nil
+            throw NSError(domain: "burrow.priv", code: Int(rc),
+                          userInfo: [NSLocalizedDescriptionKey: "Administrator access was declined."])
+        }
+        file = pipe
+        let mh = FileHandle(fileDescriptor: fileno(pipe), closeOnDealloc: false)
+        master = mh
+        mh.readabilityHandler = { [weak self] h in
+            let d = h.availableData
+            if d.isEmpty {                       // EOF → the root tool exited
+                h.readabilityHandler = nil
+                self?.onExit?()
+                return
+            }
+            self?.onData?(String(decoding: d, as: UTF8.self))
+        }
+    }
+
+    func send(_ bytes: [UInt8]) { try? master?.write(contentsOf: Data(bytes)) }
+    func stopReading() { master?.readabilityHandler = nil }
+    func terminate() {
+        master?.readabilityHandler = nil
+        if let file { fclose(file); self.file = nil }   // closing the pipe → root tool gets EOF
+        if let authRef { AuthorizationFree(authRef, []); self.authRef = nil }
+    }
 }

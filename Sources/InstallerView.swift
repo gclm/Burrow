@@ -29,7 +29,8 @@ final class MoInteractiveRunner: ObservableObject {
 
     let title: String
     private let subcommand: String
-    private var pty = PTYTask()
+    private var transport: MoTransport?
+    private var elevated = false
     private var screen = ""        // raw TUI output, pre-confirm
     private var result = ""        // output after the FINAL Enter (Mole's removal results)
     private var confirmed = false
@@ -41,31 +42,49 @@ final class MoInteractiveRunner: ObservableObject {
     init(subcommand: String, title: String) { self.subcommand = subcommand; self.title = title }
 
     /// (Re)start the scan from a clean slate by driving `mo <subcommand>` in a
-    /// pseudo-terminal. Run as the user (never elevated): for Downloads/Desktop/
-    /// project folders TCC is keyed on the app, not the uid, so root wouldn't
-    /// dodge the prompts anyway — Full Disk Access is the real fix, gated by the
-    /// view before we get here.
-    func start() {
+    /// pseudo-terminal. With `elevated`, run mo as ROOT through the system auth
+    /// dialog (PrivilegedSession) — that launches it outside Burrow's TCC
+    /// responsibility chain, so it scans Downloads/Desktop without the per-folder
+    /// flood (the same trick Clean uses; the non-elevated path stays as the user).
+    func start(elevated: Bool = false) {
         guard let mo = MoleCLI.findExecutable() else { phase = .failed("mo not found"); return }
+        self.elevated = elevated
         // Fresh state for every (re)scan.
-        pty.master?.readabilityHandler = nil
-        pty.terminate()
-        pty = PTYTask()
+        transport?.terminate()
         screen = ""; result = ""; confirmScreen = ""
         confirmed = false; listReady = false; pressedProceed = false
         items = []; resultText = ""; totalCount = 0; wantedCount = 0
         phase = .scanning
-        pty.onExit = { [weak self] in Task { @MainActor in self?.handleExit() } }
-        do { try pty.launch(mo, [subcommand]) }
-        catch { phase = .failed("Couldn't start `mo \(subcommand)`."); return }
-        pty.master?.readabilityHandler = { [weak self] h in
-            let d = h.availableData
-            guard !d.isEmpty, let s = String(data: d, encoding: .utf8) else { return }
-            Task { @MainActor in self?.ingest(s) }
+
+        let onData: (String) -> Void = { [weak self] s in Task { @MainActor in self?.ingest(s) } }
+        let onExit: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.handleExit() } }
+
+        if elevated {
+            let priv = PrivilegedSession()
+            priv.onData = onData; priv.onExit = onExit
+            transport = priv
+            let sub = subcommand, home = NSHomeDirectory()
+            // AEWP blocks on the native auth dialog → off the main thread.
+            DispatchQueue.global(qos: .userInitiated).async {
+                do { try priv.launch(mo: mo, subcommand: sub, home: home) }
+                catch {
+                    Task { @MainActor in
+                        if case .scanning = self.phase {
+                            self.phase = .failed("Administrator access was declined — nothing was scanned.")
+                        }
+                    }
+                }
+            }
+        } else {
+            let pty = PTYTask()
+            pty.onData = onData; pty.onExit = onExit
+            transport = pty
+            do { try pty.launch(mo, [subcommand]) }
+            catch { phase = .failed("Couldn't start `mo \(subcommand)`."); return }
         }
     }
 
-    func rescan() { start() }
+    func rescan() { start(elevated: elevated) }
 
     /// Apply selection: toggle the wanted rows, then poll the screen until the
     /// redraw settles and confirm ONLY if the checked rows match the wanted
@@ -79,7 +98,7 @@ final class MoInteractiveRunner: ObservableObject {
         wantedCount = wanted.count
         let wantedNames = Set(wanted.compactMap { items.indices.contains($0) ? items[$0].name : nil })
         let expectedCount = items.count
-        pty.send(MoTUI.keystrokesToSelect(wanted, count: items.count, confirm: false))
+        transport?.send(MoTUI.keystrokesToSelect(wanted, count: items.count, confirm: false))
         verifyThenConfirm(wanted: wanted, wantedNames: wantedNames, expectedCount: expectedCount, attempt: 0, last: nil)
     }
 
@@ -103,16 +122,16 @@ final class MoInteractiveRunner: ObservableObject {
                 // "Remove N? Enter confirm, ESC cancel" screen, then answer it.
                 pressedProceed = true
                 confirmScreen = ""
-                pty.send([0x0d])
+                transport?.send([0x0d])
                 awaitFinalConfirm(attempt: 0)
             } else {
-                pty.send(MoTUI.quit)
+                transport?.send(MoTUI.quit)
                 phase = .failed("Couldn't confirm the selection safely (\(onScreen.count)/\(wanted.count) toggled). Nothing was removed — please try again.")
             }
             return
         }
         guard attempt < maxAttempts else {
-            pty.send(MoTUI.quit)
+            transport?.send(MoTUI.quit)
             phase = .failed("The selection didn't settle in time. Nothing was removed — please try again.")
             return
         }
@@ -136,16 +155,16 @@ final class MoInteractiveRunner: ObservableObject {
         if txt.localizedCaseInsensitiveContains("esc cancel"), let n = MoTUI.removalCount(txt) {
             if n == wantedCount {
                 confirmed = true
-                pty.send([0x0d])              // second Enter → mo executes the removal
+                transport?.send([0x0d])              // second Enter → mo executes the removal
             } else {
-                pty.send([0x1b])              // ESC → back out
-                pty.send(MoTUI.quit)
+                transport?.send([0x1b])              // ESC → back out
+                transport?.send(MoTUI.quit)
                 phase = .failed("mo's confirm showed \(n) item\(n == 1 ? "" : "s"), but you picked \(wantedCount). Nothing was removed — please rescan and try again.")
             }
             return
         }
         guard attempt < 30 else {            // ~4.5s waiting for mo's confirm screen
-            pty.send([0x1b]); pty.send(MoTUI.quit)
+            transport?.send([0x1b]); transport?.send(MoTUI.quit)
             phase = .failed("mo didn't reach its confirm screen in time. Nothing was removed — please try again.")
             return
         }
@@ -155,9 +174,9 @@ final class MoInteractiveRunner: ObservableObject {
     }
 
     func cancel() {
-        pty.master?.readabilityHandler = nil
-        pty.send(MoTUI.quit)
-        pty.terminate()
+        transport?.stopReading()
+        transport?.send(MoTUI.quit)
+        transport?.terminate()
         switch phase { case .done, .failed: break; default: phase = .done(130) }
     }
 
@@ -177,8 +196,8 @@ final class MoInteractiveRunner: ObservableObject {
     }
 
     private func handleExit() {
-        pty.master?.readabilityHandler = nil
-        let status = pty.terminationStatus
+        transport?.stopReading()
+        let status = transport?.terminationStatus ?? 0
         // Never override a failure/cancel we already decided on.
         if case .failed = phase { return }
         if case .done = phase { return }
@@ -252,17 +271,16 @@ struct MoInteractiveView: View {
     }
 
     /// Scan only on an explicit tap. With Full Disk Access we scan directly;
-    /// without it, the gate explains it (the ONLY way to scan Downloads/Desktop/
-    /// project dirs without a per-folder prompt — root wouldn't help, since TCC
-    /// is keyed on the app, not the uid).
+    /// without it the gate offers "Scan with admin" (runs mo as root via the
+    /// system auth dialog — outside Burrow's TCC chain, so no per-folder flood).
     private func onScanTapped() {
-        if Privacy.hasFullDiskAccess() { startScan() }
+        if Privacy.hasFullDiskAccess() { startScan(elevated: false) }
         else { showFDAGate = true }
     }
-    private func startScan() {
+    private func startScan(elevated: Bool) {
         showFDAGate = false
         scanRequested = true
-        runner.start()
+        runner.start(elevated: elevated)
     }
     /// Return to the tool's hero (same "Back" semantics as Clean/Optimize).
     private func backToHero() {
@@ -278,8 +296,9 @@ struct MoInteractiveView: View {
             if showFDAGate {
                 FullDiskAccessRequired(
                     accent: cfg.tool.accent,
-                    onRecheck: { if Privacy.hasFullDiskAccess() { startScan() } },
-                    onCancel: { showFDAGate = false })   // no "Scan with admin": root can't dodge TCC here
+                    onRecheck: { if Privacy.hasFullDiskAccess() { startScan(elevated: false) } },
+                    onRunAnyway: { startScan(elevated: true) },   // root via system auth → no flood
+                    onCancel: { showFDAGate = false })
             } else {
                 ToolHero(tool: cfg.tool, title: cfg.tool.title, subtitle: cfg.tool.tagline) {
                     PillButton(title: "Scan") { onScanTapped() }
