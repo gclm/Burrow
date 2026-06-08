@@ -34,10 +34,15 @@ concurrency:
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+
+      # Use the newest Xcode on the runner so xcodebuild can read the project
+      # format xcodegen emits (Homebrew's xcodegen targets the latest Xcode).
+      - name: Select newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)" && xcodebuild -version
 
       - name: Install xcodegen
         run: brew install xcodegen
