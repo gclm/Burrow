@@ -117,6 +117,11 @@ struct AnalyzeView: View {
         }
         .buttonStyle(.plain)
         .disabled(!e.isDir)
+        .contextMenu {
+            Button(NSLocalizedString("Reveal in Finder", comment: "")) { AnalyzeIcons.reveal(e.path) }
+            Divider()
+            Button(NSLocalizedString("Move to Trash", comment: ""), role: .destructive) { model.trash(e) }
+        }
     }
 
     // MARK: Main
@@ -137,7 +142,9 @@ struct AnalyzeView: View {
                             .multilineTextAlignment(.center).frame(maxWidth: 340)
                     }
                 } else {
-                    TreemapView(entries: model.entries) { e in model.drill(into: e) }
+                    TreemapView(entries: model.entries,
+                                onOpen: { e in model.drill(into: e) },
+                                onTrash: { e in model.trash(e) })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -175,6 +182,7 @@ struct AnalyzeView: View {
 struct TreemapView: View {
     let entries: [DiskScanEntry]
     let onOpen: (DiskScanEntry) -> Void
+    var onTrash: (DiskScanEntry) -> Void = { _ in }
     @State private var hovered: String?
 
     private static let palette: [Color] = [
@@ -211,8 +219,10 @@ struct TreemapView: View {
             .onHover { hovered = $0 ? e.id : (hovered == e.id ? nil : hovered) }
             .onTapGesture { onOpen(e) }
             .contextMenu {
-                Button("Reveal in Finder") { AnalyzeIcons.reveal(e.path) }
-                if e.isDir { Button("Open here") { onOpen(e) } }
+                Button(NSLocalizedString("Reveal in Finder", comment: "")) { AnalyzeIcons.reveal(e.path) }
+                if e.isDir { Button(NSLocalizedString("Open here", comment: "")) { onOpen(e) } }
+                Divider()
+                Button(NSLocalizedString("Move to Trash", comment: ""), role: .destructive) { onTrash(e) }
             }
     }
 
@@ -291,6 +301,35 @@ final class AnalyzeModel: ObservableObject {
         guard let last = crumbs.last else { return }
         cache[last.path] = nil   // drop the cached walk so we re-scan
         scan(last.path, name: last.name, push: false, force: true)
+    }
+
+    /// Move an item to the Trash (recoverable), after an explicit confirm. The
+    /// treemap is exactly where you spot a forgotten 8 GB folder, so removing it
+    /// shouldn't mean leaving for Finder. Updates the view in place and drops the
+    /// current folder's cached walk so a later refresh recomputes honestly.
+    func trash(_ e: DiskScanEntry) {
+        let alert = NSAlert()
+        alert.messageText = String(format: NSLocalizedString("Move \u{201C}%@\u{201D} to Trash?", comment: ""), e.name)
+        alert.informativeText = String(format: NSLocalizedString("This moves %@ (%@) to the Trash, where you can restore it.", comment: ""),
+                                       e.isDir ? NSLocalizedString("this folder", comment: "") : NSLocalizedString("this file", comment: ""),
+                                       Fmt.bytes(e.size))
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: NSLocalizedString("Move to Trash", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            try FileManager.default.trashItem(at: URL(fileURLWithPath: e.path), resultingItemURL: nil)
+            entries.removeAll { $0.id == e.id }
+            total = max(0, total - e.size)
+            if let last = crumbs.last { cache[last.path] = nil }
+        } catch {
+            let err = NSAlert()
+            err.messageText = NSLocalizedString("Couldn't move to Trash", comment: "")
+            err.informativeText = error.localizedDescription
+            err.alertStyle = .warning
+            err.runModal()
+        }
     }
 
     private func scan(_ path: String, name: String, push: Bool, force: Bool = false) {
