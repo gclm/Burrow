@@ -15,14 +15,25 @@ struct TopNav: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            homeIsland
             toolGroup
             utilityGroup
         }
     }
 
-    private var toolGroup: some View {
+    /// Home (the Burrow mark) sits in its own capsule — it's the dashboard, not
+    /// one of the cleanup tools, so it reads as a separate island like Settings.
+    private var homeIsland: some View {
         HStack(spacing: 2) {
             homeButton
+        }
+        .padding(4)
+        .background(Capsule(style: .continuous).fill(Color.black.opacity(0.24)))
+        .overlay(Capsule(style: .continuous).strokeBorder(Brand.hairline, lineWidth: 1))
+    }
+
+    private var toolGroup: some View {
+        HStack(spacing: 2) {
             ForEach(Tool.navOrder) { tool in
                 tab(tool)
             }
@@ -48,8 +59,6 @@ struct TopNav: View {
         }
         .buttonStyle(.plain)
         .help(NSLocalizedString("Home", comment: ""))
-        .padding(.leading, 2)
-        .padding(.trailing, 2)
     }
 
     private var utilityGroup: some View {

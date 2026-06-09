@@ -191,7 +191,7 @@ struct TreemapView: View {
     let entries: [DiskScanEntry]
     let onOpen: (DiskScanEntry) -> Void
     var onTrash: (DiskScanEntry) -> Void = { _ in }
-    @State private var hoveredIndex: Int?
+    @State private var hoveredID: String?
 
     private static let palette: [Color] = [
         Color(hex: 0x4FA3E3), Color(hex: 0x57C2A5), Color(hex: 0xE6A93C),
@@ -204,21 +204,12 @@ struct TreemapView: View {
             let shown = Array(entries.filter { $0.size > 0 }.prefix(120))
             let rects = Treemap.layout(weights: shown.map { Double($0.size) },
                                        in: CGRect(x: 0, y: 0, width: geo.size.width, height: geo.size.height))
-            ZStack(alignment: .topLeading) {
+            ZStack {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { i, e in
-                    block(e, rects[i], color: Self.palette[i % Self.palette.count], isHover: hoveredIndex == i)
+                    block(e, rects[i], color: Self.palette[i % Self.palette.count], isHover: hoveredID == e.id)
                 }
             }
-            .contentShape(Rectangle())
-            // One hit-test against the laid-out rects — per-block `.offset` +
-            // `.onHover` mis-fired (the offset view's hit region didn't track
-            // the cell), so hovering would light up the wrong square.
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let pt): hoveredIndex = rects.firstIndex { $0.contains(pt) }
-                case .ended:          hoveredIndex = nil
-                }
-            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 
@@ -232,7 +223,14 @@ struct TreemapView: View {
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(isHover ? Color.white.opacity(0.6) : Color.black.opacity(0.25), lineWidth: 1))
             .overlay(label(e, w: w, h: h))
             .frame(width: w, height: h)
-            .offset(x: r.minX + 1, y: r.minY + 1)
+            // `.position` (not `.offset`) so each cell's hit-test region tracks
+            // its drawn rect — `.offset` left hit-testing at the layout origin,
+            // which both lit the wrong square AND made only the first cell
+            // clickable.
+            .position(x: r.midX, y: r.midY)
+            .onHover { inside in
+                if inside { hoveredID = e.id } else if hoveredID == e.id { hoveredID = nil }
+            }
             .onTapGesture { onOpen(e) }
             .contextMenu {
                 Button(NSLocalizedString("Reveal in Finder", comment: "")) { AnalyzeIcons.reveal(e.path) }
