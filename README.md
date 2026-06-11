@@ -21,6 +21,14 @@ a **long-running history** of your Mac's metrics in a local SQLite database,
 an **MCP server** so any AI agent (Claude Code, Cursor, Codex…) can ask
 "what's been happening on this Mac.", and a lot more planned features to come!
 
+<a href="https://www.star-history.com/?repos=caezium%2FBurrow&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
+   <img height="350" alt="Star History Chart" src="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
+ </picture>
+</a>
+
 ## Screenshots
 
 <table>
