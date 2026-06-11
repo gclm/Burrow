@@ -6,11 +6,16 @@
 //
 
 import Foundation
+import os
 
 struct MoleProcessResult {
     let stdout: String
     let stderr: String
     let exitCode: Int32
+    /// True when the run was killed by the timeout — distinct from a child
+    /// that genuinely failed. Without this, a timeout impersonates the
+    /// SIGTERM exit status (issue #48's "exit 15 lie").
+    var timedOut: Bool = false
 }
 
 protocol MoleProcessPort {
@@ -71,8 +76,12 @@ struct SystemMoleProcess: MoleProcessPort {
             try? handle.close()
         }
 
+        let timedOut = OSAllocatedUnfairLock(initialState: false)
         let killer = DispatchWorkItem { [weak task] in
-            if let task, task.isRunning { task.terminate() }
+            if let task, task.isRunning {
+                timedOut.withLock { $0 = true }
+                task.terminate()
+            }
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: killer)
 
@@ -84,7 +93,8 @@ struct SystemMoleProcess: MoleProcessPort {
         return MoleProcessResult(
             stdout: String(data: outData, encoding: .utf8) ?? "",
             stderr: String(data: errData, encoding: .utf8) ?? "",
-            exitCode: task.terminationStatus
+            exitCode: task.terminationStatus,
+            timedOut: timedOut.withLock { $0 }
         )
     }
 }

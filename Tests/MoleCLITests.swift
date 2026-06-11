@@ -122,4 +122,65 @@ final class MoleCLITests: XCTestCase {
         XCTAssertLessThan(elapsed, 3.0, "the 5s sleep must be killed by the 0.4s timeout")
         XCTAssertNotEqual(r.exitCode, 0, "a terminated process is non-zero")
     }
+
+    // MARK: - Discovery caching + revalidation (issue #48)
+    //
+    // GUI call sites hit findExecutable() on every sampler tick and tool
+    // run; without a cache each call re-stats 3 paths and may shell out to
+    // `which`. The cache must REVALIDATE (a deleted binary can't keep
+    // being returned) and must not cache negatives (the user installs mo
+    // mid-session and the installer view rechecks).
+
+    private var fakeMo: URL!
+
+    private func makeFakeMo() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("burrow-disco-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let exe = dir.appendingPathComponent("mo")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: exe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exe.path)
+        return exe
+    }
+
+    override func tearDown() {
+        MoleCLI.discoveryCandidates = nil
+        MoleCLI.resetDiscoveryCache()
+        if let fakeMo { try? FileManager.default.removeItem(at: fakeMo.deletingLastPathComponent()) }
+        super.tearDown()
+    }
+
+    func testFindExecutable_cachesAPositiveHit() throws {
+        fakeMo = try makeFakeMo()
+        MoleCLI.discoveryCandidates = [fakeMo.path]
+        MoleCLI.resetDiscoveryCache()
+
+        XCTAssertEqual(MoleCLI.findExecutable(), fakeMo.path)
+        // Point discovery somewhere else: a cached (still-valid) hit must
+        // win without re-walking the candidate list.
+        MoleCLI.discoveryCandidates = ["/nonexistent/mo"]
+        XCTAssertEqual(MoleCLI.findExecutable(), fakeMo.path, "valid cache hit skips re-discovery")
+    }
+
+    func testFindExecutable_revalidatesAndDropsAStaleHit() throws {
+        fakeMo = try makeFakeMo()
+        MoleCLI.discoveryCandidates = [fakeMo.path]
+        MoleCLI.resetDiscoveryCache()
+        XCTAssertEqual(MoleCLI.findExecutable(), fakeMo.path)
+
+        try FileManager.default.removeItem(at: fakeMo)
+        XCTAssertNil(MoleCLI.findExecutable(),
+                     "a vanished binary must not keep being served from the cache")
+    }
+
+    func testFindExecutable_neverCachesAMiss() throws {
+        MoleCLI.discoveryCandidates = ["/nonexistent/mo"]
+        MoleCLI.resetDiscoveryCache()
+        XCTAssertNil(MoleCLI.findExecutable())
+
+        // mo gets installed mid-session → the next lookup must see it.
+        fakeMo = try makeFakeMo()
+        MoleCLI.discoveryCandidates = [fakeMo.path]
+        XCTAssertEqual(MoleCLI.findExecutable(), fakeMo.path)
+    }
 }

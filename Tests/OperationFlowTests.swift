@@ -161,10 +161,10 @@ final class OperationFlowTests: XCTestCase {
         XCTAssertFalse(op.detail.isEmpty, "HUD detail fed from the stream")
     }
 
-    func testElevationDeclined_failsWithNoOutput() async throws {
-        // osascript exits nonzero with zero lines when the auth prompt is
-        // dismissed — that's a failure, not a "done with exit 1".
-        let port = FakeProcessPort(script: [.exited(1)])
+    func testAuthCancelledFromThePort_failsTheFlow() async throws {
+        // Auth-cancel is classified by the RUNNER now (issue #48) — the flow
+        // just renders the failure.
+        let port = FakeProcessPort(script: [.authCancelled])
         let flow = makeFlow(port)
         flow.start(Self.cleanOp(elevated: true))
         await settle(flow)
@@ -191,6 +191,7 @@ final class SystemProcessPortTests: XCTestCase {
             switch e {
             case .line(let l): lines.append(l)
             case .exited(let c): exit = c
+            case .authCancelled: XCTFail("un-elevated specs never classify as auth-cancel")
             }
         }
         return (lines, exit)
@@ -224,5 +225,32 @@ final class SystemProcessPortTests: XCTestCase {
         let r = await run(ProcessSpec(executable: "/nonexistent/binary", arguments: [],
                                       stdin: nil, elevated: false, timeout: nil))
         XCTAssertEqual(r.exit, 127)
+    }
+
+    // MARK: Auth-cancel classification — an engine rule, not view folklore
+
+    /// "osascript exits nonzero having produced nothing" used to be an
+    /// OperationFlow heuristic; the runner owns it now, as a pure rule.
+    func testFinalEvent_classifiesAuthCancel() {
+        // The previously-untestable path: elevated, failed, silent.
+        guard case .authCancelled = SystemProcessPort.finalEvent(
+            exitCode: 1, elevated: true, sawOutput: false) else {
+            return XCTFail("elevated + nonzero + no output = dismissed auth prompt")
+        }
+        // Output means the run really happened — a real failure, not cancel.
+        guard case .exited(1) = SystemProcessPort.finalEvent(
+            exitCode: 1, elevated: true, sawOutput: true) else {
+            return XCTFail("an elevated run that produced output failed on its own terms")
+        }
+        // Un-elevated runs have no auth prompt to cancel.
+        guard case .exited(2) = SystemProcessPort.finalEvent(
+            exitCode: 2, elevated: false, sawOutput: false) else {
+            return XCTFail("no elevation, no auth-cancel")
+        }
+        // Success is success even when silent.
+        guard case .exited(0) = SystemProcessPort.finalEvent(
+            exitCode: 0, elevated: true, sawOutput: false) else {
+            return XCTFail("exit 0 is never a cancel")
+        }
     }
 }
