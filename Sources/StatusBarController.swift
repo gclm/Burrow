@@ -134,7 +134,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         awakeItem.submenu = awakeMenu
         menu.addItem(awakeItem)
 
-        menu.addItem(makeItem(NSLocalizedString("Clean Screen", comment: ""), action: #selector(cleanScreen)))
+        let cleanItem = makeItem(NSLocalizedString("Clean Screen", comment: ""), action: #selector(cleanScreen))
+        cleanItem.state = CleanScreen.shared.isActive ? .on : .off
+        menu.addItem(cleanItem)
         menu.addItem(.separator())
         menu.addItem(makeItem(NSLocalizedString("About Burrow", comment: ""), action: #selector(showAbout)))
         menu.addItem(makeItem(NSLocalizedString("Check for Updates…", comment: ""), action: #selector(checkUpdates)))
@@ -170,7 +172,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         Awake.shared.start(duration)
     }
     @objc private func stopAwake() { Awake.shared.stop() }
-    @objc private func cleanScreen() { CleanScreen.shared.show() }
+    @objc private func cleanScreen() { CleanScreen.shared.toggle() }
     @objc private func showAbout() { delegate?.showAboutPanel() }
     @objc private func checkUpdates() { UpdateCheck.checkNow() }
 }

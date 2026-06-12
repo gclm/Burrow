@@ -13,14 +13,18 @@
 import AppKit
 import SwiftUI
 
-final class CleanScreen {
+final class CleanScreen: ObservableObject {
     static let shared = CleanScreen()
 
     private var windows: [NSWindow] = []
     private var eventTap: CFMachPort?
     private var localMonitor: Any?
 
-    var isActive: Bool { !windows.isEmpty }
+    /// Published so the HUD's Wipe quick action can render an armed state
+    /// (accent + "esc to exit") while the wipe overlay is up, the same way
+    /// Stay Awake reflects `Awake.isActive`. Always mutated on the main
+    /// thread (button actions, menu items, hot keys, the Esc monitor).
+    @Published private(set) var isActive = false
 
     private init() {}
 
@@ -48,6 +52,7 @@ final class CleanScreen {
         }
         if Store.cleanScreenInputLock { startInputLock() }
         NSCursor.hide()
+        isActive = true
     }
 
     func hide() {
@@ -56,6 +61,7 @@ final class CleanScreen {
         if let monitor = localMonitor { NSEvent.removeMonitor(monitor); localMonitor = nil }
         stopInputLock()
         NSCursor.unhide()
+        isActive = false
     }
 
     func toggle() { isActive ? hide() : show() }

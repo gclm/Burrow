@@ -18,6 +18,7 @@ struct PopupView: View {
     @StateObject private var model: HUDModel
     @ObservedObject private var ops = OperationCenter.shared
     @ObservedObject private var awake = Awake.shared
+    @ObservedObject private var cleanScreen = CleanScreen.shared
     private weak var delegate: AppDelegate?
 
     init(db: DB, live: LiveFeed, delegate: AppDelegate) {
@@ -103,7 +104,7 @@ struct PopupView: View {
             Chip(text: s.hardware.cpuModel.replacingOccurrences(of: "Apple ", with: ""), color: Brand.textSecondary)
             Chip(text: s.hardware.totalRam, color: Brand.textSecondary)
             if !s.hardware.osVersion.isEmpty {
-                Chip(text: "macOS \(s.hardware.osVersion)", color: Brand.textSecondary)
+                Chip(text: Fmt.macOSVersion(s.hardware.osVersion), color: Brand.textSecondary)
             }
             Chip(text: String(format: NSLocalizedString("up %@", comment: ""), Fmt.uptime(s.uptimeSeconds)),
                  color: Brand.textSecondary)
@@ -284,7 +285,8 @@ struct PopupView: View {
         let rpm = s.thermal?.fanSpeed ?? 0
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
-                Eyebrow(text: "Fan", glyph: "fan", color: Brand.textSecondary)
+                // Neutral on purpose — see PowerAccent (Format.swift).
+                Eyebrow(text: "Fan", glyph: "fan", color: PowerAccent.fan)
                 Spacer(minLength: 2)
                 if fanCount > 0 {
                     Chip(text: String(format: NSLocalizedString("%d fans", comment: ""), fanCount), color: Brand.textSecondary)
@@ -332,8 +334,10 @@ struct PopupView: View {
         if let b = s.batteries?.first {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
+                    // Accent semantics live in PowerAccent (Format.swift):
+                    // red = low, green = charging/full, amber = discharging.
                     Eyebrow(text: "Battery", glyph: "battery.100",
-                            color: b.percent <= 20 ? Brand.red : Brand.green)
+                            color: PowerAccent.battery(percent: b.percent, status: b.status))
                     Spacer()
                     Chip(text: String(format: NSLocalizedString("%d%% Health", comment: ""), b.capacity),
                          color: b.health == "Good" ? Brand.green : Brand.gold)
@@ -353,11 +357,11 @@ struct PopupView: View {
                     Spacer()
                     HStack(spacing: 8) {
                         RingGauge(percent: b.percent,
-                                  color: b.percent <= 20 ? Brand.red : Brand.green,
+                                  color: PowerAccent.battery(percent: b.percent, status: b.status),
                                   glyph: "laptopcomputer", label: NSLocalizedString("Mac", comment: ""), size: 34)
                         ForEach(Array(bluetoothWithBattery(s).prefix(3).enumerated()), id: \.offset) { _, device in
                             RingGauge(percent: Double(device.batteryPercent ?? 0),
-                                      color: (device.batteryPercent ?? 100) <= 20 ? Brand.red : Brand.green,
+                                      color: PowerAccent.level(device.batteryPercent ?? 0),
                                       glyph: BluetoothStrip.glyph(device.name),
                                       label: device.name, size: 34)
                         }
@@ -454,10 +458,14 @@ struct PopupView: View {
                           active: awake.isActive) {
                 awake.isActive ? awake.stop() : awake.start(.untilOff)
             }
+            // Armed like Stay Awake while the wipe overlay is up: accent
+            // toggled and the label flips to the exit hint.
             utilityButton(glyph: "rectangle.inset.filled",
-                          label: NSLocalizedString("Wipe", comment: ""),
-                          active: false) {
-                CleanScreen.shared.show()
+                          label: cleanScreen.isActive
+                              ? NSLocalizedString("esc to exit", comment: "")
+                              : NSLocalizedString("Wipe", comment: ""),
+                          active: cleanScreen.isActive) {
+                cleanScreen.toggle()
             }
             if model.hasExternalVolumes {
                 utilityButton(glyph: "eject.fill",
