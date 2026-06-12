@@ -465,7 +465,6 @@
 "Agent-ready — MCP tools for Claude, Cursor, Codex (off until you opt in)" = "随时接入智能体 —— 为 Claude、Cursor、Codex 提供 MCP 工具（默认关闭，需手动开启）";
 "Open source — read every line" = "开源 —— 每一行代码都可查看";
 "Open the Burrow repository on GitHub" = "在 GitHub 上打开 Burrow 仓库";
-"Anonymous usage & crash reports help development — toggle anytime in Settings" = "匿名使用统计与崩溃报告有助于开发 —— 可随时在设置中切换";
 "Start using Burrow" = "开始使用 Burrow";
 "Open Settings" = "打开系统设置";
 "Check" = "检查";

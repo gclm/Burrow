@@ -8,9 +8,9 @@
 //    1. Permissions — Full Disk Access as a PermissionRow; skippable,
 //       because the safe scan works without it (the in-flow gates and
 //       the access banner remain the fallback).
-//    2. Free & open source — the $0 card, what's included, and the
-//       telemetry disclosure with the real toggle inline so the opt-out
-//       is named to the user's face on day one.
+//    2. Free & open source — the $0 card and what's included. Telemetry
+//       stays opt-out and lives in Settings ▸ Advanced only (no inline
+//       toggle here — hand-test feedback 2026-06).
 //
 //  Window chrome is plain (traffic lights only); AppDelegate owns the
 //  window and passes `onFinish`.
@@ -24,7 +24,6 @@ struct OnboardingView: View {
     @State private var page = 0
     @State private var fdaGranted = Privacy.hasFullDiskAccess()
     @State private var showRelaunchHint = false
-    @State private var telemetryOn = Store.telemetryEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -140,21 +139,6 @@ struct OnboardingView: View {
                     }
                 }
                 .padding(20)
-
-                Rectangle().fill(Brand.hairline).frame(height: 1)
-
-                // Telemetry disclosure — the real toggle, inline, on first run.
-                HStack(spacing: 10) {
-                    Text("Anonymous usage & crash reports help development — toggle anytime in Settings")
-                        .font(Brand.sans(11)).foregroundStyle(Brand.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    Toggle("", isOn: $telemetryOn)
-                        .labelsHidden().toggleStyle(.switch).tint(Brand.green)
-                        .onChange(of: telemetryOn) { _, on in Telemetry.setEnabled(on) }
-                        .accessibilityLabel(NSLocalizedString("Share anonymous usage & crash reports", comment: ""))
-                }
-                .padding(.horizontal, 20).padding(.vertical, 13)
             }
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Brand.cardFill))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Brand.hairline, lineWidth: 1))
@@ -173,7 +157,6 @@ struct OnboardingView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             PillButton(title: "Start using Burrow") {
-                Store.telemetryNoticeAcknowledged = true
                 onFinish()
             }
             .padding(24)

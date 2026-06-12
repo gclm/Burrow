@@ -187,6 +187,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Finishing marks onboarding complete and opens the main window.
     @available(macOS 14, *)
     private func showOnboardingWindow() {
+        // Engine gate, restated at the onboarding door: the launch path
+        // already checks `mo` before startServices(), but onboarding can
+        // also be forced (BURROW_OPEN_ON_LAUNCH=onboarding) and the engine
+        // can vanish between gate and slides. The slides assume a working
+        // engine, so route into the guided install instead — its Recheck
+        // re-enters startServices() and lands back here.
+        guard MoleCLI.findExecutable() != nil else {
+            showInstallWindow()
+            return
+        }
         NSApp.setActivationPolicy(.regular)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
