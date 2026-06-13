@@ -818,7 +818,7 @@ final class StatusModel: ObservableObject {
         let since = now - 30 * 60
         var cpu: [Double] = [], mem: [Double] = [], gpu: [Double] = [], net: [Double] = []
         var fan: [Double] = []
-        for stored in MetricsStore(db: db).snapshots(.init(since: since, until: now), maxPoints: 40) {
+        for stored in MetricsStore(db: db).snapshots(.init(since: since, until: now), maxPoints: 40).snapshots {
             let s = stored.status
             cpu.append(s.cpu.usage)
             mem.append(s.memory.usedPercent)

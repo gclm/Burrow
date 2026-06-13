@@ -158,6 +158,24 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(readers[0]["prefix"] as? String, MetricsStore.snapshotPrefix)
     }
 
+    func testCallInfo_surfacesDriftCounters() throws {
+        MetricsStore.resetDriftCounters()
+        let clean = try catalog.call(name: "burrow_info", arguments: [:])
+        let cleanObj = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(clean.utf8)) as? [String: Any])
+        XCTAssertEqual(cleanObj["decode_skipped_total"] as? Int, 0)
+        XCTAssertTrue(cleanObj["last_drift"] is NSNull)
+
+        try db.insert(prefix: MetricsStore.snapshotPrefix, ts: 999, json: "not valid json")
+        _ = MetricsStore(db: db).snapshots(.init(since: 0, until: 1000))
+
+        let drifted = try catalog.call(name: "burrow_info", arguments: [:])
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(drifted.utf8)) as? [String: Any])
+        XCTAssertEqual(obj["decode_skipped_total"] as? Int, 1)
+        let last = try XCTUnwrap(obj["last_drift"] as? [String: Any])
+        XCTAssertEqual(last["ts"] as? Int, 999)
+        XCTAssertNotNil(last["message"] as? String)
+    }
+
     /// The semantic usage tool must re-rank by the requested metric — the
     /// whole point of adding it over burrow_top_processes (which only ever
     /// ranks by peak CPU and so calls a one-second spike the "top" process).
@@ -287,14 +305,8 @@ final class MCPTests: XCTestCase {
 
     // MARK: - Action tools (the gate)
 
-    // The whole safety model: a real (deleting) run needs BOTH the per-call
-    // confirm AND the user's opt-in. Neither alone is enough.
-    func testRealActionAllowed_needsBothConfirmAndOptIn() {
-        XCTAssertTrue(ToolCatalog.realActionAllowed(confirm: true, optedIn: true))
-        XCTAssertFalse(ToolCatalog.realActionAllowed(confirm: true, optedIn: false))
-        XCTAssertFalse(ToolCatalog.realActionAllowed(confirm: false, optedIn: true))
-        XCTAssertFalse(ToolCatalog.realActionAllowed(confirm: false, optedIn: false))
-    }
+    // (The decide() truth table in MoActionsTests is the safety model now —
+    // realActionAllowed and its four-cell test collapsed into it.)
 
     // confirm:true with the Settings opt-in OFF must NOT run mo — it must
     // short-circuit to a blocked result (no deletion attempted).

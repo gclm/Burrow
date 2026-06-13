@@ -650,7 +650,7 @@ final class HUDModel: ObservableObject {
         var cpu: [Double] = [], mem: [Double] = [], net: [Double] = [], gpu: [Double] = []
         var fan: [Double] = []
         var processLists: [[ProcessInfo]] = []
-        for stored in MetricsStore(db: db).snapshots(.init(since: now - 60 * 60, until: now), maxPoints: 60) {
+        for stored in MetricsStore(db: db).snapshots(.init(since: now - 60 * 60, until: now), maxPoints: 60).snapshots {
             let s = stored.status
             cpu.append(s.cpu.usage)
             mem.append(s.memory.usedPercent)

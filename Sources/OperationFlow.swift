@@ -32,6 +32,10 @@ struct ProcessSpec: Sendable, Equatable {
 enum ProcessEvent: Sendable {
     case line(String)        // ANSI-stripped, newline-split
     case exited(Int32)
+    /// The elevated run's auth prompt was dismissed: osascript exited
+    /// nonzero having produced nothing. Classified by the RUNNER (issue
+    /// #48's one error taxonomy), not by view-level heuristics.
+    case authCancelled
 }
 
 /// The one process boundary the flow needs: spawn per the spec, stream
@@ -202,21 +206,22 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
                     guard !self.cancelRequested else { return }
                     self.reactivateIfElevated(op)   // backstop: no-output runs
                     self.report = op.reduce(lines)
-                    if op.elevated, code != 0, lines.isEmpty {
-                        // The auth prompt was dismissed — osascript exits
-                        // nonzero having produced nothing.
-                        self.state = .finished(.failed(NSLocalizedString("authorization cancelled", comment: "")))
-                        if op.label != nil { self.center.end(id, success: false) }
-                    } else {
-                        self.state = .finished(.done(exit: code))
-                        if op.label != nil {
-                            // Replace the last streamed line with the parsed
-                            // result line where the op provides one — that's
-                            // what a completion notification shows.
-                            let detail = self.report.map { op.finalDetail?($0) ?? "" } ?? ""
-                            self.center.end(id, success: code == 0, detail: detail)
-                        }
+                    self.state = .finished(.done(exit: code))
+                    if op.label != nil {
+                        // Replace the last streamed line with the parsed
+                        // result line where the op provides one — that's
+                        // what a completion notification shows.
+                        let detail = self.report.map { op.finalDetail?($0) ?? "" } ?? ""
+                        self.center.end(id, success: code == 0, detail: detail)
                     }
+                case .authCancelled:
+                    // Auth-cancel is classified by the runner now (#48 taxonomy),
+                    // not by a view-level "elevated + nonzero + no output" guess.
+                    guard !self.cancelRequested else { return }
+                    self.reactivateIfElevated(op)
+                    self.report = op.reduce(lines)
+                    self.state = .finished(.failed(NSLocalizedString("authorization cancelled", comment: "")))
+                    if op.label != nil { self.center.end(id, success: false) }
                 }
             }
         }
@@ -287,7 +292,8 @@ struct SystemProcessPort: ProcessPort {
             }
             func finish(_ code: Int32) {                   // streamQ only
                 for line in splitter.flush() { cont.yield(.line(line)) }
-                cont.yield(.exited(code))
+                cont.yield(Self.finalEvent(exitCode: code, elevated: spec.elevated,
+                                           sawOutput: splitter.sawAnyLine))
                 cont.finish()
             }
 
@@ -391,22 +397,39 @@ struct SystemProcessPort: ProcessPort {
         }
     }
 
+    /// The one final-event rule (issue #48's error taxonomy): an elevated
+    /// run that exits nonzero having produced NOTHING is a dismissed auth
+    /// prompt, not a command failure. Pure → table-tested.
+    static func finalEvent(exitCode: Int32, elevated: Bool, sawOutput: Bool) -> ProcessEvent {
+        if elevated, exitCode != 0, !sawOutput { return .authCancelled }
+        return .exited(exitCode)
+    }
+
     /// Buffers partial chunks and emits whole lines; thread-confined to
     /// whichever handler feeds it (pipe readability or the log tail timer).
     private final class LineSplitter: @unchecked Sendable {
         private var buffer = ""
+        private var emitted = false
         private let lock = NSLock()
+        /// Whether any line has been emitted — the auth-cancel classifier's
+        /// "did the run produce output" input, tracked where lines are made.
+        var sawAnyLine: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return emitted
+        }
         func ingest(_ s: String) -> [String] {
             lock.lock(); defer { lock.unlock() }
             buffer += s
             var parts = buffer.components(separatedBy: "\n")
             buffer = parts.removeLast()
+            if !parts.isEmpty { emitted = true }
             return parts
         }
         func flush() -> [String] {
             lock.lock(); defer { lock.unlock() }
             let rest = buffer
             buffer = ""
+            if !rest.isEmpty { emitted = true }
             return rest.isEmpty ? [] : [rest]
         }
     }

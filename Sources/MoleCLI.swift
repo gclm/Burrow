@@ -20,12 +20,43 @@
 
 import Foundation
 import AppKit  // NSAlert
+import os
 
 enum MoleCLI {
+    /// Test seam: when set, discovery checks ONLY these paths (no trusted
+    /// list, no `which` fallback) so cache semantics are deterministic.
+    internal static var discoveryCandidates: [String]?
+
+    /// Cached positive discovery (issue #48). Call sites hit
+    /// `findExecutable()` on every sampler tick and tool run; without this
+    /// each call re-stats three paths and may shell out to `which`.
+    private static let discoveryCache = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+    static func resetDiscoveryCache() {
+        discoveryCache.withLock { $0 = nil }
+    }
+
     /// Locate the `mo` executable. Checks PATH plus a few known install
     /// locations because GUI apps inherit a stripped-down PATH that often
     /// doesn't include Homebrew's bin directory.
+    ///
+    /// Positive hits are cached and REVALIDATED with one stat per call (a
+    /// vanished binary must not keep being served); misses are never cached
+    /// (the user installs mo mid-session and the installer view rechecks).
     static func findExecutable() -> String? {
+        if let cached = discoveryCache.withLock({ $0 }) {
+            if FileManager.default.isExecutableFile(atPath: cached) { return cached }
+            discoveryCache.withLock { $0 = nil }
+        }
+        let found = discover()
+        if let found { discoveryCache.withLock { $0 = found } }
+        return found
+    }
+
+    private static func discover() -> String? {
+        if let candidates = discoveryCandidates {
+            return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        }
         // Hardcoded locations first — fastest path and works in the
         // GUI-launched case where PATH is `/usr/bin:/bin:/usr/sbin:/sbin`
         // and Homebrew is invisible.
@@ -146,11 +177,13 @@ enum MoleCLI {
 
     /// Result of a subprocess invocation. `exitCode == 0` is the success
     /// convention; callers that care about diagnostics should look at
-    /// `stderr` when it's non-zero.
+    /// `stderr` when it's non-zero, and `timedOut` distinguishes "the
+    /// timeout killed it" from a genuine failure (issue #48).
     struct Result {
         let stdout: String
         let stderr: String
         let exitCode: Int32
+        var timedOut: Bool = false
     }
 
     /// The subprocess runner. Production uses `SystemMoleProcess`; tests inject
@@ -184,7 +217,8 @@ enum MoleCLI {
         return Result(
             stdout: processResult.stdout,
             stderr: processResult.stderr,
-            exitCode: processResult.exitCode
+            exitCode: processResult.exitCode,
+            timedOut: processResult.timedOut
         )
     }
 

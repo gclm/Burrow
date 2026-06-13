@@ -62,6 +62,18 @@ final class DB {
         return try DB(at: support.appendingPathComponent("burrow.db"))
     }
 
+    /// Reader-process open of the default DB — what `burrow --mcp` uses.
+    /// Same file, same WAL connection, but NO recovery ladder (see
+    /// `init(readerAt:)`).
+    static func openDefaultReader() throws -> DB {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                               in: .userDomainMask).first!
+            .appendingPathComponent("Burrow", isDirectory: true)
+        try FileManager.default.createDirectory(at: support,
+                                                withIntermediateDirectories: true)
+        return try DB(readerAt: support.appendingPathComponent("burrow.db"))
+    }
+
     /// Test-friendly initialiser. Pass a temp path from `XCTestCase.setUp`.
     ///
     /// A damaged or non-writable history file must never brick launch
@@ -98,6 +110,20 @@ final class DB {
                 try self.open(at: url)
             }
         }
+    }
+
+    /// Reader-process initialiser: opens WITHOUT the recovery ladder.
+    ///
+    /// The GUI and `burrow --mcp` share one file; recovery (dropping
+    /// sidecars, quarantining) is only safe in the writer process — a
+    /// reader doing it against the writer's live WAL is the data-loss
+    /// path. So a reader that can't open simply throws; repair belongs
+    /// to the writer, on its next launch.
+    ///
+    /// (The connection itself is still read-write — SQLite needs RW to
+    /// participate in WAL — but this process never inserts.)
+    init(readerAt url: URL) throws {
+        try self.open(at: url)
     }
 
     /// SQLITE_BUSY / SQLITE_LOCKED (or their extended forms) — another
@@ -240,15 +266,26 @@ final class DB {
     /// Most recent row for a prefix, or nil. O(log N) via the (prefix, ts)
     /// PK — SQLite walks the index backwards from the prefix's upper bound.
     func findLatest(prefix: String) -> Row? {
+        findLatestRows(prefix: prefix, limit: 1).first
+    }
+
+    /// The newest `limit` rows for a prefix, newest first. Same index walk
+    /// as `findLatest`; the reader uses it to fall back past drifted rows.
+    func findLatestRows(prefix: String, limit: Int) -> [Row] {
+        guard limit > 0 else { return [] }
+        var rows: [Row] = []
         var stmt: OpaquePointer?
-        let sql = "SELECT ts, json FROM samples WHERE prefix=? ORDER BY ts DESC LIMIT 1;"
-        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        let sql = "SELECT ts, json FROM samples WHERE prefix=? ORDER BY ts DESC LIMIT ?;"
+        guard sqlite3_prepare_v2(self.handle, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_TRANSIENT)
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-        let ts = Int(sqlite3_column_int64(stmt, 0))
-        let json = String(cString: sqlite3_column_text(stmt, 1))
-        return Row(ts: ts, json: json)
+        sqlite3_bind_int64(stmt, 2, Int64(limit))
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let ts = Int(sqlite3_column_int64(stmt, 0))
+            let json = String(cString: sqlite3_column_text(stmt, 1))
+            rows.append(Row(ts: ts, json: json))
+        }
+        return rows
     }
 
     /// All rows for `prefix` in `[since, until]` (inclusive). Returned in

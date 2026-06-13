@@ -35,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var queryServer: QueryServer?
     private var statusBar: StatusBarController?
 
+    /// The one feed hub (issue #53): shared, demand-counted pumps keyed by
+    /// query — views bind to feeds instead of owning timers.
+    let feeds = FeedHub()
+
     /// Single main window. Holds the sidebar + content router.
     private var mainWC: NSWindowController?
 
@@ -333,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @available(macOS 14.0, *)
     private func installMainContent(into window: NSWindow, initial: Pane) {
         guard let db = self.db, let producer = self.producer else { return }
-        let root = RootView(db: db, producer: producer, delegate: self, initialPane: initial)
+        let root = RootView(db: db, producer: producer, feeds: feeds, delegate: self, initialPane: initial)
         let host = NSHostingController(rootView: root)
         host.view.wantsLayer = true
         host.view.layer?.backgroundColor = .clear

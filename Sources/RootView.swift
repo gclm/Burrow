@@ -25,6 +25,7 @@ extension Notification.Name {
 struct RootView: View {
     let db: DB
     let producer: SnapshotProducer
+    let feeds: FeedHub
     weak var delegate: AppDelegate?
 
     @State private var pane: Pane
@@ -41,9 +42,10 @@ struct RootView: View {
     @State private var lastNonSettingsPane: Pane = .home
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(db: DB, producer: SnapshotProducer, delegate: AppDelegate?, initialPane: Pane = .home) {
+    init(db: DB, producer: SnapshotProducer, feeds: FeedHub, delegate: AppDelegate?, initialPane: Pane = .home) {
         self.db = db
         self.producer = producer
+        self.feeds = feeds
         self.delegate = delegate
         self._pane = State(initialValue: initialPane)
     }
@@ -120,7 +122,7 @@ struct RootView: View {
             // (2 s polls, 15 s DB reads) that must stop when the window
             // closes — unmounting fires their onDisappear teardown.
             if pane == .home, windowVisible {
-                HomeView(db: db, live: producer.live, onNavigate: { pane = $0 })
+                HomeView(db: db, live: producer.live, feeds: feeds, onNavigate: { pane = $0 })
             }
             if pane == .settings, windowVisible {
                 SettingsView(onRunMaintenance: { [weak delegate] in

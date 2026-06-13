@@ -18,6 +18,7 @@ import SwiftUI
 struct HomeView: View {
     let db: DB
     let live: LiveFeed
+    let feeds: FeedHub
     var onNavigate: (Pane) -> Void
 
     enum Section: String, CaseIterable, Identifiable {
@@ -88,7 +89,7 @@ struct HomeView: View {
     private var content: some View {
         switch section {
         case .overview: StatusView(db: db, live: live)
-        case .history:  HistoryView(db: db, live: live)
+        case .history:  HistoryView(db: db, live: live, feeds: feeds)
         case .activity: ActivityView()
         }
     }

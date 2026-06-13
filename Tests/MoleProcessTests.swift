@@ -108,6 +108,23 @@ final class MoleProcessTests: XCTestCase {
 
         XCTAssertLessThan(elapsed, 3.0, "the 5s sleep must be killed by the 0.4s timeout")
         XCTAssertNotEqual(result.exitCode, 0, "a terminated process is non-zero")
+        // Issue #48: the timeout must surface as the truth, not impersonate
+        // a SIGTERM exit the caller can't tell apart from a real failure.
+        XCTAssertTrue(result.timedOut, "a timeout says so — no more exit-15 lie")
+    }
+
+    func testSystemCapture_normalExitIsNotMarkedTimedOut() throws {
+        let result = try SystemMoleProcess().capture(
+            executable: "/bin/echo", args: ["fast"],
+            stdin: nil, environment: nil, timeout: 5)
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertFalse(result.timedOut)
+    }
+
+    func testMoleCLIRun_surfacesTimedOutToCallers() throws {
+        let result = try MoleCLI.run(args: ["5"], executable: "/bin/sleep", timeout: 0.4)
+        XCTAssertTrue(result.timedOut)
+        XCTAssertNotEqual(result.exitCode, 0)
     }
 
     func testMoleCLIRun_stillCapturesKnownEchoInvocationThroughRealPort() throws {

@@ -690,6 +690,14 @@ final class SoftwareModel: ObservableObject {
     /// matcher pre-flight (audit H4) before any y is answered.
     private func engineUninstall(_ targets: [InstalledApp]) {
         let names = targets.map { $0.uninstallName }
+        // The dialog above is the consent; the ticket (argv / stdin /
+        // timeout / preflight) is minted by the shared gate — the same
+        // truth table and catalog the MCP server uses. (One deliberate
+        // change rides along: the catalog's unified 600 s uninstall
+        // timeout replaces this view's old 300 s.)
+        guard case .run(let ticket) = MoActions.decide(
+            .uninstall(apps: names, permanent: false), .real,
+            .gui(hasFullDiskAccess: true, userConfirmed: true)) else { return }
         loading = true
         // Surface the run in the menu-bar HUD's Activity section too.
         let opId = UUID()
@@ -700,8 +708,8 @@ final class SoftwareModel: ObservableObject {
             // answering any prompt, verify what it MATCHED equals what the
             // user CONFIRMED. `--dry-run` changes nothing and exits at its
             // prompt on stdin EOF; an unparseable result aborts (fail closed).
-            let dry = try? MoleCLI.run(args: ["uninstall", "--dry-run"] + names,
-                                       stdin: "", timeout: 120)
+            let pre = ticket.action.preflightCommand!
+            let dry = try? MoleCLI.run(args: pre.args, stdin: pre.stdin, timeout: pre.timeout ?? 120)
             let dryText = (dry?.stdout ?? "") + "\n" + (dry?.stderr ?? "")
             let matched = UninstallGuard.matchedApps(inDryRunOutput: dryText)
             let problem: String?
@@ -727,11 +735,11 @@ final class SoftwareModel: ObservableObject {
                 return
             }
 
-            // Verified — answer mo's two prompts (proceed + final confirm),
-            // with a small margin. The y's only ever apply to the set the
-            // dry run just pinned.
-            let answers = String(repeating: "y\n", count: 4)
-            let res = try? MoleCLI.run(args: ["uninstall"] + names, stdin: answers, timeout: 300)
+            // Verified — the ticket's stdin answers mo's prompts (proceed +
+            // final confirm); they only ever apply to the set the dry run
+            // just pinned.
+            let res = try? MoleCLI.run(args: ticket.command.args, stdin: ticket.command.stdin,
+                                       timeout: ticket.command.timeout ?? 600)
             let ok = (res?.exitCode ?? 1) == 0
             let parsed = Self.fetch()
             Task { @MainActor in
