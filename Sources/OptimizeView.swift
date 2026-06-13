@@ -112,20 +112,33 @@ struct OptimizeView: View {
     }
 
     private func operation(_ args: [String], gate: ToolOperation<OptimizeReport>.Gate,
-                           elevated: Bool, label: String) -> ToolOperation<OptimizeReport> {
-        ToolOperation(label: label, arguments: args, gate: gate, elevated: elevated,
-                      reduce: { lines in
-                          let (groups, summary) = parseTaskReport(lines)
-                          return (groups, summary, TaskTicker.reduce(lines))
-                      },
-                      hudLine: { TaskReportText.line($0) })
+                           elevated: Bool, label: String,
+                           notify: Bool = false) -> ToolOperation<OptimizeReport> {
+        // Final detail = the figure the done-banner shows; previews keep
+        // the last streamed line instead ("refreshed" would be a lie for
+        // a dry run).
+        var finalDetail: (@Sendable (OptimizeReport) -> String)?
+        if notify {
+            finalDetail = { report in
+                String(format: NSLocalizedString("%d areas refreshed", comment: ""), report.groups.count)
+            }
+        }
+        return ToolOperation(label: label, arguments: args, gate: gate, elevated: elevated,
+                             reduce: { lines in
+                                 let (groups, summary) = parseTaskReport(lines)
+                                 return (groups, summary, TaskTicker.reduce(lines))
+                             },
+                             hudLine: { TaskReportText.line($0) },
+                             notifyOnEnd: notify,
+                             finalDetail: finalDetail)
     }
 
     /// Optimize already runs elevated (root) → no flood, no gate.
     private func runOptimize() {
         preview = false
         flow.start(operation(["optimize"], gate: .none, elevated: true,
-                             label: NSLocalizedString("Optimizing", comment: "")))
+                             label: NSLocalizedString("Optimizing", comment: ""),
+                             notify: true))
     }
 
     private func runPreview() {

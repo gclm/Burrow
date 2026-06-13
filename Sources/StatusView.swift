@@ -2,11 +2,11 @@
 //  StatusView.swift
 //  Burrow
 //
-//  The Status dashboard — Burrow's faithful take on mole.fit's Status
-//  ("Sun") screen, built on the data the SnapshotProducer already
-//  writes (`mo status --json` → SQLite). Two rows of glass metric cards
-//  (Health / CPU / Memory / GPU, then Disk / Network / Battery) over a
-//  sortable, pinnable process table.
+//  The Status dashboard — Burrow's live-metrics ("Sun") screen, built
+//  on the data the SnapshotProducer already writes (`mo status --json`
+//  → SQLite). Two rows of glass metric cards (Health / CPU / Memory /
+//  GPU, then Disk / Network / Battery) over a sortable, pinnable
+//  process table.
 //
 //  Live values come from `LiveFeed.lastSnapshot` (in-memory, refreshed
 //  each tick); the sparklines pull ~30 min of history from the DB.
@@ -117,14 +117,17 @@ struct StatusView: View {
             eyebrow: "GPU", glyph: "cpu.fill", accent: Brand.orange,
             value: hasUsage ? String(format: "%.0f", g!.usage) : "—",
             unit: hasUsage ? "%" : "",
-            chip: chip, values: model.gpuHist, chartStyle: .area,
+            chip: chip, values: model.gpuHist, chartStyle: .bars,
             footnote: cores > 0 ? "\(name) · \(cores) cores" : name)
     }
 
     /// FAN tile — v1 read-only (design 3.2): RPM + "macOS manages
     /// speed". Mode controls wait for the privileged helper; no disabled
     /// placebo buttons. fanCount 0 means mole couldn't read any fan
-    /// (normal on Apple Silicon) → say "no fan data", not "idle".
+    /// (normal on Apple Silicon) → say "no fan data", not "idle" — and
+    /// draw no graph. With fans present the RPM sparkline renders like
+    /// the other tiles; an all-zero series (parked fans) is real data
+    /// and shows as a flat baseline, never hidden.
     private func fanTile(_ s: MoleStatus) -> some View {
         let fanCount = s.thermal?.fanCount ?? 0
         let rpm = s.thermal?.fanSpeed ?? 0
@@ -147,6 +150,8 @@ struct StatusView: View {
                             Text("Idle").font(Brand.sans(11)).foregroundStyle(Brand.textTertiary).padding(.leading, 4)
                         }
                     }
+                    MiniChart(values: model.fanHist, color: PowerAccent.fan, style: .area)
+                        .frame(height: 30)
                 } else {
                     Text("—").font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textTertiary)
                 }
@@ -172,9 +177,9 @@ struct StatusView: View {
         return ValueTile(
             eyebrow: "Network", glyph: "network", accent: Brand.green,
             value: value, unit: unit, chip: chip,
-            // Tile sparkline = the recent 10 min of the 1 s ring; the full
-            // hour lives in the History tab (it flattened the tile).
-            values: useLive ? io.netHistory(lastSeconds: 600) : model.netHist, chartStyle: .area,
+            // Tile sparkline = the recent 2 min of the 1 s ring; longer
+            // windows live in the History tab (they flattened the tile).
+            values: useLive ? io.netHistory(lastSeconds: 120) : model.netHist, chartStyle: .area,
             footnote: "↓ \(Fmt.rate(rx))  ↑ \(Fmt.rate(tx)) · \(snapNet?.name ?? "—") · \(snapNet?.ip ?? "—")")
     }
 }
@@ -494,7 +499,10 @@ struct ProcessCard: View {
                 header(count: rows.count)
                 Rectangle().fill(Brand.hairline).frame(height: 1)
                 // The table scrolls on its own, under a sticky header,
-                // independent of the page scroll (design 3.2).
+                // independent of the page scroll (design 3.2). Kept compact
+                // on purpose — ~6½ rows (each row is 30 pt: 18 pt content +
+                // 2×6 pt padding) with the half row hinting there's more to
+                // scroll, instead of one long box that dominates the page.
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(rows, id: \.pid) { p in
@@ -507,7 +515,7 @@ struct ProcessCard: View {
                     }
                 }
                 .scrollIndicators(.automatic)
-                .frame(height: 380)
+                .frame(height: 195)
             }
         }
     }
@@ -706,6 +714,10 @@ final class StatusModel: ObservableObject {
     @Published var memHist: [Double] = []
     @Published var gpuHist: [Double] = []
     @Published var netHist: [Double] = []
+    /// Fan RPM series. Samples are kept only when that snapshot actually
+    /// reported fans (fanCount > 0) — 0 RPM with fans present is real
+    /// data (parked), no fans detected contributes nothing.
+    @Published var fanHist: [Double] = []
     @Published var sortKey: ProcSort = .cpu
     @Published var sortAsc = false
     @Published var pinned: Set<Int> = []
@@ -805,6 +817,7 @@ final class StatusModel: ObservableObject {
         let now = Int(Date().timeIntervalSince1970)
         let since = now - 30 * 60
         var cpu: [Double] = [], mem: [Double] = [], gpu: [Double] = [], net: [Double] = []
+        var fan: [Double] = []
         for stored in MetricsStore(db: db).snapshots(.init(since: since, until: now), maxPoints: 40) {
             let s = stored.status
             cpu.append(s.cpu.usage)
@@ -813,7 +826,12 @@ final class StatusModel: ObservableObject {
             let rx = s.network.reduce(0.0) { $0 + $1.rxRateMbs }
             let tx = s.network.reduce(0.0) { $0 + $1.txRateMbs }
             net.append(rx + tx)
+            // Same rule as the History chart: plot RPM whenever fans are
+            // detected — including 0 (parked) — skip fan-less snapshots.
+            if let thermal = s.thermal, (thermal.fanCount ?? 0) > 0 {
+                fan.append(Double(thermal.fanSpeed))
+            }
         }
-        cpuHist = cpu; memHist = mem; gpuHist = gpu; netHist = net
+        cpuHist = cpu; memHist = mem; gpuHist = gpu; netHist = net; fanHist = fan
     }
 }

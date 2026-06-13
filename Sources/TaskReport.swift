@@ -53,6 +53,18 @@ struct TaskSummary {
     let categories: String     // "20"
     var freeChange: String = "" // "+1.39GB" — real run only (disk freed)
     var freeNow: String = ""    // "2.50GB"  — real run only (free space after)
+
+    /// One-line result the Clean done-banner AND a completion
+    /// notification show: the real freed-space numbers when the engine
+    /// printed them, the tracked-cleanup size otherwise.
+    var completionLine: String {
+        var parts: [String] = []
+        if !freeChange.isEmpty { parts.append(String(format: NSLocalizedString("Freed %@", comment: ""), freeChange)) }
+        else if !space.isEmpty { parts.append(String(format: NSLocalizedString("Cleaned %@", comment: ""), space)) }
+        if !freeNow.isEmpty { parts.append(String(format: NSLocalizedString("%@ free now", comment: ""), freeNow)) }
+        if !items.isEmpty { parts.append(String(format: NSLocalizedString("%@ items", comment: ""), items)) }
+        return parts.isEmpty ? NSLocalizedString("Done", comment: "") : parts.joined(separator: " · ")
+    }
 }
 
 enum TaskReportText {

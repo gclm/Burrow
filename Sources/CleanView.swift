@@ -258,7 +258,8 @@ struct CleanView: View {
         }
         screen = .hero
         realFlow.start(.moleStream(["clean"], elevated: true,
-                                   label: NSLocalizedString("Cleaning caches", comment: "")))
+                                   label: NSLocalizedString("Cleaning caches", comment: ""),
+                                   notifyOnEnd: true))
         // Restore is owned by the RUN, not the view: this watcher ends the
         // fenced session however the flow finishes, even if the user
         // navigates away mid-clean (a view-attached onChange would never
@@ -289,7 +290,8 @@ struct CleanView: View {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         screen = .hero
         realFlow.start(.moleStream(["clean"], elevated: true,
-                                   label: NSLocalizedString("Cleaning caches", comment: "")))
+                                   label: NSLocalizedString("Cleaning caches", comment: ""),
+                                   notifyOnEnd: true))
     }
 
     // MARK: - Trash mode
@@ -314,7 +316,8 @@ struct CleanView: View {
 
         screen = .hero
         let opID = UUID()
-        OperationCenter.shared.begin(opID, label: NSLocalizedString("Moving caches to Trash", comment: ""))
+        OperationCenter.shared.begin(opID, label: NSLocalizedString("Moving caches to Trash", comment: ""),
+                                     notifiesOnEnd: true)
         DispatchQueue.global(qos: .userInitiated).async {
             var moved = 0, failed = 0
             for path in paths {
@@ -359,7 +362,7 @@ struct CleanView: View {
             Rectangle().fill(Brand.hairline).frame(height: 1)
             if case .finished(.done) = realFlow.state {
                 DoneBanner(accent: Tool.clean.accent, title: "Cleaned",
-                           detail: realFlow.report?.summary.map(cleanedDetail))
+                           detail: realFlow.report?.summary.map(\.completionLine))
             }
             TaskReportView(groups: realFlow.report?.groups ?? [], accent: Tool.clean.accent)
         }
@@ -378,17 +381,8 @@ struct CleanView: View {
         }
     }
 
-    /// Post-run detail line. Prefers the real freed-space numbers Mole
-    /// prints after a live clean ("Free space change / now"), falling
-    /// back to the tracked-cleanup size when those aren't present.
-    private func cleanedDetail(_ s: TaskSummary) -> String {
-        var parts: [String] = []
-        if !s.freeChange.isEmpty { parts.append(String(format: NSLocalizedString("Freed %@", comment: ""), s.freeChange)) }
-        else if !s.space.isEmpty { parts.append(String(format: NSLocalizedString("Cleaned %@", comment: ""), s.space)) }
-        if !s.freeNow.isEmpty { parts.append(String(format: NSLocalizedString("%@ free now", comment: ""), s.freeNow)) }
-        if !s.items.isEmpty { parts.append(String(format: NSLocalizedString("%@ items", comment: ""), s.items)) }
-        return parts.isEmpty ? NSLocalizedString("Done", comment: "") : parts.joined(separator: " · ")
-    }
+    // (The post-run detail line lives on TaskSummary.completionLine —
+    // shared with the completion notification.)
 
     // MARK: - Dry-run plumbing
 

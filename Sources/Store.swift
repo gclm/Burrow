@@ -345,6 +345,48 @@ enum Store {
         else { d.removeObject(forKey: action.storeKey); d.synchronize() }
     }
 
+    // MARK: - Notifications
+
+    /// Completion notices for long operations (real clean / optimize /
+    /// uninstall), posted only when Burrow isn't frontmost. ON by
+    /// default — "tell me when the thing I started finishes" is the
+    /// quiet, useful default.
+    static var notifyOnCompletion: Bool {
+        get { d.object(forKey: "notify_on_completion") as? Bool ?? true }
+        set { write(newValue, "notify_on_completion") }
+    }
+
+    /// Smart reminders (clean cadence / low disk / full Trash). Opt-in:
+    /// nudges are a taste thing and the default must stay quiet.
+    static var smartRemindersEnabled: Bool {
+        get { d.object(forKey: "smart_reminders_enabled") as? Bool ?? false }
+        set { write(newValue, "smart_reminders_enabled") }
+    }
+
+    // Reminder throttle state (not user-facing): hysteresis flags so a
+    // metric hovering at its threshold can't flap, timestamps for the
+    // weekly cooldowns. See ReminderRules (Notifications.swift).
+
+    static var diskLowNoticeActive: Bool {
+        get { d.object(forKey: "disk_low_notice_active") as? Bool ?? false }
+        set { write(newValue, "disk_low_notice_active") }
+    }
+
+    static var trashNoticeActive: Bool {
+        get { d.object(forKey: "trash_notice_active") as? Bool ?? false }
+        set { write(newValue, "trash_notice_active") }
+    }
+
+    static var lastCleanReminderAt: Date? {
+        get { d.object(forKey: "last_clean_reminder_at") as? Date }
+        set { write(newValue, "last_clean_reminder_at") }
+    }
+
+    static var lastTrashReminderAt: Date? {
+        get { d.object(forKey: "last_trash_reminder_at") as? Date }
+        set { write(newValue, "last_trash_reminder_at") }
+    }
+
     // MARK: - Onboarding
 
     /// Whether the user has finished (or skipped past) the first-run

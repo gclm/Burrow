@@ -23,21 +23,31 @@ final class OperationCenter: ObservableObject {
         var phase: Phase
         var detail: String
         var startedAt: Date
+        /// Post a user notification when this op ends — long,
+        /// user-initiated work only (real cleans / optimize /
+        /// uninstalls; never previews or scans).
+        var notifiesOnEnd: Bool = false
     }
 
     @Published private(set) var ops: [Op] = []
 
     var hasActivity: Bool { !ops.isEmpty }
 
-    func begin(_ id: UUID, label: String) {
+    func begin(_ id: UUID, label: String, notifiesOnEnd: Bool = false) {
         if let i = ops.firstIndex(where: { $0.id == id }) {
             ops[i].label = label
             ops[i].phase = .running
             ops[i].detail = ""
+            ops[i].notifiesOnEnd = notifiesOnEnd
         } else {
-            ops.insert(Op(id: id, label: label, phase: .running, detail: "", startedAt: Date()), at: 0)
+            ops.insert(Op(id: id, label: label, phase: .running, detail: "", startedAt: Date(),
+                          notifiesOnEnd: notifiesOnEnd), at: 0)
         }
         if ops.count > 6 { ops = Array(ops.prefix(6)) }
+        // Settle notification permission now, while the op runs, so the
+        // completion notice can fire the moment it ends (even if the window
+        // has been closed by then).
+        if notifiesOnEnd { BurrowNotifier.shared.prepareAuthorization() }
     }
 
     func detail(_ id: UUID, _ text: String) {
@@ -51,6 +61,13 @@ final class OperationCenter: ObservableObject {
         guard let i = ops.firstIndex(where: { $0.id == id }) else { return }
         ops[i].phase = success ? .done : .failed
         if !detail.isEmpty { ops[i].detail = detail }
+        // Completion notice for opted-in ops (clean / optimize /
+        // uninstall). The notifier stays quiet when Burrow is frontmost
+        // or the Settings toggle is off.
+        if ops[i].notifiesOnEnd {
+            BurrowNotifier.shared.operationCompleted(label: ops[i].label, success: success,
+                                                     detail: ops[i].detail)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 22) { [weak self] in
             guard let self, let j = self.ops.firstIndex(where: { $0.id == id }) else { return }
             // The runner reuses its id across runs (dry-run → real run):

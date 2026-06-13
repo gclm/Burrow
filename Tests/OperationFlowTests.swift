@@ -159,6 +159,26 @@ final class OperationFlowTests: XCTestCase {
         XCTAssertEqual(op.label, "Scanning caches")
         XCTAssertEqual(op.phase, .done)
         XCTAssertFalse(op.detail.isEmpty, "HUD detail fed from the stream")
+        XCTAssertFalse(op.notifiesOnEnd, "preview-style ops never notify")
+    }
+
+    // The real-clean shape: notifyOnEnd rides into the OperationCenter op
+    // and the parsed summary replaces the last streamed line as the final
+    // detail — that's the body a completion notification carries.
+    func testNotifyOnEnd_andFinalDetail_reachOperationCenter() async throws {
+        let port = FakeProcessPort(script: Self.cannedClean)
+        let center = OperationCenter()
+        let flow = OperationFlow<TaskRunReport>(process: port, hasFullDiskAccess: { true },
+                                                resolveMo: { _ in "/usr/local/bin/mo" }, center: center)
+
+        flow.start(.moleStream(["clean"], label: "Cleaning caches", notifyOnEnd: true))
+        await settle(flow)
+
+        let op = try XCTUnwrap(center.ops.first)
+        XCTAssertTrue(op.notifiesOnEnd)
+        XCTAssertEqual(op.phase, .done)
+        XCTAssertEqual(op.detail, "Cleaned 383.8MB · 372 items",
+                       "final detail is the parsed summary, not the last raw line")
     }
 
     func testElevationDeclined_failsWithNoOutput() async throws {

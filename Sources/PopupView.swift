@@ -235,7 +235,7 @@ struct PopupView: View {
             ValueTile(variant: .hud, eyebrow: "GPU", glyph: "cpu.fill", accent: Brand.orange,
                       value: gpuValue(s).0, unit: gpuValue(s).1,
                       chip: (s.thermal?.gpuTemp).flatMap { $0 > 0 ? (String(format: "%.0f°C", $0), Brand.orange) : nil },
-                      values: model.gpuHist, chartStyle: .area,
+                      values: model.gpuHist, chartStyle: .bars,
                       footnote: (s.gpu?.first?.name ?? "GPU").replacingOccurrences(of: "Apple ", with: ""))
             ValueTile(variant: .hud, eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
                       value: String(format: "%.0f", s.memory.usedPercent), unit: "%",
@@ -279,7 +279,9 @@ struct PopupView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.hairline, lineWidth: 1))
     }
 
-    /// FAN tile — read-only v1 (same rule as Status: no placebo buttons).
+    /// FAN tile — read-only v1 (same rule as Status: no placebo buttons,
+    /// and the RPM sparkline only exists when fans were detected; an
+    /// all-zero series means parked fans, which is real data).
     private func fanTile(_ s: MoleStatus) -> some View {
         let fanCount = s.thermal?.fanCount ?? 0
         let rpm = s.thermal?.fanSpeed ?? 0
@@ -295,6 +297,9 @@ struct PopupView: View {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(fanCount > 0 ? "\(rpm)" : "—").font(Brand.mono(15, .semibold)).foregroundStyle(Brand.textPrimary)
                 if fanCount > 0 { Text("RPM").font(Brand.mono(9)).foregroundStyle(Brand.textSecondary) }
+            }
+            if fanCount > 0 {
+                MiniChart(values: model.fanHist, color: PowerAccent.fan, style: .area).frame(height: 13)
             }
             Text(fanCount > 0 ? NSLocalizedString("macOS manages speed", comment: "")
                               : NSLocalizedString("No fan data", comment: ""))
@@ -566,6 +571,9 @@ final class HUDModel: ObservableObject {
     @Published var memHist: [Double] = []
     @Published var netHist: [Double] = []
     @Published var gpuHist: [Double] = []
+    /// Fan RPM series — kept only for snapshots that reported fans
+    /// (fanCount > 0); see the fan tile's rule.
+    @Published var fanHist: [Double] = []
     /// Heaviest process by average CPU over the last hour of samples.
     @Published var topDrain: (name: String, avgCPU: Double)?
     /// Lifetime cleanup totals from `mo history`; nil = not loaded or
@@ -640,6 +648,7 @@ final class HUDModel: ObservableObject {
     private func refreshHistory() {
         let now = Int(Date().timeIntervalSince1970)
         var cpu: [Double] = [], mem: [Double] = [], net: [Double] = [], gpu: [Double] = []
+        var fan: [Double] = []
         var processLists: [[ProcessInfo]] = []
         for stored in MetricsStore(db: db).snapshots(.init(since: now - 60 * 60, until: now), maxPoints: 60) {
             let s = stored.status
@@ -647,11 +656,15 @@ final class HUDModel: ObservableObject {
             mem.append(s.memory.usedPercent)
             net.append(s.network.reduce(0.0) { $0 + $1.rxRateMbs + $1.txRateMbs })
             gpu.append(max(0, s.gpu?.first?.usage ?? 0))
+            if let thermal = s.thermal, (thermal.fanCount ?? 0) > 0 {
+                fan.append(Double(thermal.fanSpeed))
+            }
             if let procs = s.topProcesses { processLists.append(procs) }
         }
         // Sparklines stay ~30 min; the drain ranking uses the full hour.
         cpuHist = Array(cpu.suffix(30)); memHist = Array(mem.suffix(30))
         netHist = Array(net.suffix(30)); gpuHist = Array(gpu.suffix(30))
+        fanHist = Array(fan.suffix(30))
         topDrain = TopDrain.heaviest(processLists)
     }
 

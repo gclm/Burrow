@@ -665,7 +665,8 @@ final class SoftwareModel: ObservableObject {
             return (app, paths)
         }
         let opId = UUID()
-        OperationCenter.shared.begin(opId, label: NSLocalizedString("Removing reviewed files", comment: ""))
+        OperationCenter.shared.begin(opId, label: NSLocalizedString("Removing reviewed files", comment: ""),
+                                     notifiesOnEnd: true)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var moved = 0, failed = 0
             for (_, paths) in work {
@@ -692,7 +693,8 @@ final class SoftwareModel: ObservableObject {
         loading = true
         // Surface the run in the menu-bar HUD's Activity section too.
         let opId = UUID()
-        OperationCenter.shared.begin(opId, label: "Uninstalling \(targets.count) app\(targets.count == 1 ? "" : "s")")
+        OperationCenter.shared.begin(opId, label: "Uninstalling \(targets.count) app\(targets.count == 1 ? "" : "s")",
+                                     notifiesOnEnd: true)
         DispatchQueue.global(qos: .userInitiated).async {
             // Pre-flight (audit H4): mo does its own name matching, so before
             // answering any prompt, verify what it MATCHED equals what the

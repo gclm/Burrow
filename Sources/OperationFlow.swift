@@ -63,6 +63,14 @@ struct ToolOperation<Report: Sendable> {
     /// Optional line → HUD detail mapping (clean/optimize use
     /// TaskReportText.line); nil shows the raw line.
     var hudLine: (@Sendable (String) -> String)? = nil
+    /// Post a user notification when this run finishes — real cleans /
+    /// optimize / uninstalls, never previews. The post itself lives in
+    /// OperationCenter.end → BurrowNotifier.
+    var notifyOnEnd: Bool = false
+    /// Final OperationCenter detail derived from the finished report —
+    /// the result line a completion notification carries (freed bytes
+    /// etc.). nil keeps the last streamed line.
+    var finalDetail: (@Sendable (Report) -> String)? = nil
 
     /// "Scan with admin": the same operation, elevated — root bypasses TCC
     /// so the gate no longer applies.
@@ -118,6 +126,18 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
     private var currentElevated = false
     private var currentLabel: String?
     private var cancelRequested = false
+    /// One-shot per run: Burrow has already reclaimed focus from the auth
+    /// dialog, don't keep stealing it.
+    private var reactivated = false
+
+    /// Pull key focus back to Burrow after an elevated run's auth dialog
+    /// relinquished it elsewhere. No-op for un-elevated runs (no dialog) and
+    /// after the first call.
+    private func reactivateIfElevated(_ op: ToolOperation<Report>) {
+        guard op.elevated, !reactivated else { return }
+        reactivated = true
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     init(process: any ProcessPort = SystemProcessPort(),
          hasFullDiskAccess: @escaping () -> Bool = Privacy.hasFullDiskAccess,
@@ -157,7 +177,8 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
         currentElevated = op.elevated
         currentLabel = op.label
         cancelRequested = false
-        if let label = op.label { center.begin(opID, label: label) }
+        reactivated = false
+        if let label = op.label { center.begin(opID, label: label, notifiesOnEnd: op.notifyOnEnd) }
 
         let stream = process.events(spec)
         let id = opID
@@ -167,6 +188,11 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
                 guard let self, !Task.isCancelled else { return }
                 switch event {
                 case .line(let l):
+                    // The macOS auth dialog (osascript) takes key focus and
+                    // hands it back to whatever, not us — so the first output
+                    // of an elevated run (auth just cleared) is the cue to pull
+                    // focus back to Burrow, instead of making the user ⌘-tab.
+                    self.reactivateIfElevated(op)
                     lines.append(l)
                     self.report = op.reduce(lines)
                     if op.label != nil, !l.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -174,6 +200,7 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
                     }
                 case .exited(let code):
                     guard !self.cancelRequested else { return }
+                    self.reactivateIfElevated(op)   // backstop: no-output runs
                     self.report = op.reduce(lines)
                     if op.elevated, code != 0, lines.isEmpty {
                         // The auth prompt was dismissed — osascript exits
@@ -182,7 +209,13 @@ final class OperationFlow<Report: Sendable>: ObservableObject {
                         if op.label != nil { self.center.end(id, success: false) }
                     } else {
                         self.state = .finished(.done(exit: code))
-                        if op.label != nil { self.center.end(id, success: code == 0) }
+                        if op.label != nil {
+                            // Replace the last streamed line with the parsed
+                            // result line where the op provides one — that's
+                            // what a completion notification shows.
+                            let detail = self.report.map { op.finalDetail?($0) ?? "" } ?? ""
+                            self.center.end(id, success: code == 0, detail: detail)
+                        }
                     }
                 }
             }
@@ -211,12 +244,17 @@ typealias TaskRunReport = (groups: [TaskGroup], summary: TaskSummary?)
 
 extension ToolOperation where Report == TaskRunReport {
     /// A streaming `mo` run rendered through TaskReportView — the shape
-    /// clean and optimize share.
+    /// clean and optimize share. `notifyOnEnd` rides through to the
+    /// completion notification, with the parsed summary (freed bytes)
+    /// as the final detail line.
     static func moleStream(_ args: [String], gate: Gate = .none,
-                           elevated: Bool = false, label: String?) -> ToolOperation {
+                           elevated: Bool = false, label: String?,
+                           notifyOnEnd: Bool = false) -> ToolOperation {
         ToolOperation(label: label, arguments: args, gate: gate, elevated: elevated,
                       reduce: { parseTaskReport($0) },
-                      hudLine: { TaskReportText.line($0) })
+                      hudLine: { TaskReportText.line($0) },
+                      notifyOnEnd: notifyOnEnd,
+                      finalDetail: { $0.summary?.completionLine ?? "" })
     }
 }
 

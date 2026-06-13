@@ -17,6 +17,11 @@ struct PermissionRow: View {
     let granted: Bool
     var onOpenSettings: () -> Void
     var onCheck: () -> Void
+    /// When non-nil, the permission was granted *after* this process
+    /// started, so the running app can't use it until relaunch (macOS
+    /// prompts the same way). Surfaces a "Relaunch" button beside the
+    /// granted chip.
+    var onRelaunch: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -27,12 +32,17 @@ struct PermissionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(Brand.sans(13, .semibold)).foregroundStyle(Brand.textPrimary)
-                Text(benefit)
-                    .font(Brand.sans(11)).foregroundStyle(Brand.textSecondary)
+                Text(onRelaunch != nil
+                     ? NSLocalizedString("Granted — relaunch Burrow to start using it.", comment: "")
+                     : benefit)
+                    .font(Brand.sans(11))
+                    .foregroundStyle(onRelaunch != nil ? Brand.amber : Brand.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
-            if granted {
+            if let onRelaunch {
+                secondaryButton(NSLocalizedString("Relaunch", comment: ""), action: onRelaunch)
+            } else if granted {
                 Chip(text: NSLocalizedString("Granted", comment: ""), color: Brand.green)
             } else {
                 HStack(spacing: 8) {

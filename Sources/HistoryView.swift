@@ -2,9 +2,9 @@
 //  HistoryView.swift
 //  Burrow
 //
-//  History window (Burrow's own value-add over mole.fit): long-range
-//  charts over the SQLite history, plus a peak-per-process table. Opened
-//  from the HUD's clock button.
+//  History window (Burrow's own long-range value-add): charts over the
+//  SQLite history, plus a peak-per-process table. Opened from the HUD's
+//  clock button.
 //
 //  Data path is unchanged from the original: range chip → DB.findRange
 //  Sampled (stride-sampled, ≤720 rows) → decode each row to MoleStatus →
@@ -225,11 +225,11 @@ struct HistoryView: View {
                 Rectangle().fill(Brand.hairline).frame(height: 1)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 13), GridItem(.flexible(), spacing: 13)], spacing: 13) {
-                        chartCard("CPU usage", "%", [("usage", snapshot.cpuUsage, Brand.green)])
+                        chartCard("CPU usage", "%", [("usage", snapshot.cpuUsage, Brand.green)], marks: .bars)
                         chartCard("CPU load", "1m avg", [("load1", snapshot.cpuLoad1, Brand.orange)])
                         chartCard("Memory", snapshot.memoryPressure.isEmpty ? "% used" : snapshot.memoryPressure,
                                   [("used", snapshot.memoryUsed, Brand.amber)])
-                        chartCard("GPU usage", "%", [("gpu", snapshot.gpuUsage, Brand.orange)])
+                        chartCard("GPU usage", "%", [("gpu", snapshot.gpuUsage, Brand.orange)], marks: .bars)
                         chartCard("Disk I/O", "MB/s", [("read", snapshot.diskRead, Brand.blue),
                                                        ("write", snapshot.diskWrite, Color(hex: 0x6E8BEA))])
                         chartCard("Network", "MB/s", [("rx", snapshot.netRx, Brand.green),
@@ -240,7 +240,7 @@ struct HistoryView: View {
                         chartCard("Fans", snapshot.fanCount > 0 ? "RPM" : "not reported",
                                   [("fan", snapshot.fanSpeed, Color(hex: 0x6EC1E4))])
                         chartCard("Battery", "%", [("charge", snapshot.batteryPercent, Brand.green)])
-                        chartCard("Health score", "0–100", [("health", snapshot.healthScore, Brand.gold)])
+                        chartCard("Health score", "0–100", [("health", snapshot.healthScore, Brand.gold)], marks: .bars)
                         topProcessesCard
                     }
                     .padding(16)
@@ -291,8 +291,23 @@ struct HistoryView: View {
         .overlay(Capsule().strokeBorder(Brand.hairline, lineWidth: 1))
     }
 
+    /// How a chart card draws its series: continuous metrics stay lines,
+    /// discrete usage-style metrics (CPU / GPU / health) read as bars.
+    private enum ChartMarks { case line, bars }
+
+    /// Evenly spaced sample indices to label on a by-index bar axis — maps
+    /// back to real timestamps for the labels without distorting the bars.
+    /// Doubles so they match the bars' Double x-scale (an Int x on a Double
+    /// domain renders nothing).
+    private func barAxisTicks(_ count: Int, desired: Int) -> [Double] {
+        guard count > 1 else { return count == 1 ? [0] : [] }
+        let n = max(2, min(desired, count))
+        return (0..<n).map { (Double($0) * Double(count - 1) / Double(n - 1)).rounded() }
+    }
+
     private func chartCard(_ title: String, _ subtitle: String,
-                           _ series: [(name: String, points: [ChartPoint], color: Color)]) -> some View {
+                           _ series: [(name: String, points: [ChartPoint], color: Color)],
+                           marks: ChartMarks = .line) -> some View {
         let allEmpty = series.allSatisfy { $0.points.isEmpty }
         let style = AxisStyle.forRangeMinutes(range.minutes)
         let window = Double(range.minutes * 60)
@@ -308,6 +323,52 @@ struct HistoryView: View {
                     Text("No samples in this window")
                         .font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
                         .frame(maxWidth: .infinity, minHeight: 170)
+                } else if marks == .bars {
+                    // Bars are plotted BY INDEX (like the Status sparklines):
+                    // each sample gets an equal slot, so width and gaps are
+                    // uniform at every range. On a continuous time axis the
+                    // bars bunched up where samples clustered and stretched
+                    // where they were sparse — index spacing fixes both. An
+                    // integer x has a unit step of 1, so .ratio sizes the bar
+                    // as a clean fraction of that slot. Axis labels map a few
+                    // indices back to their real timestamps.
+                    let pts = series.first?.points ?? []
+                    // Width is a real pixel value from the plot geometry —
+                    // .ratio never establishes a unit on this scale (the bars
+                    // vanished), and a fixed point width renders reliably and
+                    // scales with the sample count so it never overlaps.
+                    GeometryReader { geo in
+                        let barW = max(1.0, geo.size.width / CGFloat(max(pts.count, 1)) * 0.6)
+                        Chart {
+                            ForEach(series, id: \.name) { s in
+                                ForEach(Array(s.points.enumerated()), id: \.offset) { idx, p in
+                                    BarMark(x: .value("Sample", Double(idx)), y: .value("Value", p.value),
+                                            width: .fixed(barW))
+                                        .foregroundStyle(s.color.opacity(0.85))
+                                }
+                            }
+                        }
+                        .chartXScale(domain: -0.5 ... (Double(max(pts.count, 1)) - 0.5))
+                        .chartXAxis {
+                            AxisMarks(values: barAxisTicks(pts.count, desired: style.desiredCount)) { v in
+                                AxisGridLine().foregroundStyle(Brand.hairline)
+                                if let d = v.as(Double.self) {
+                                    let i = Int(d.rounded())
+                                    if i >= 0, i < pts.count {
+                                        AxisValueLabel { Text(pts[i].time, format: style.format) }
+                                            .foregroundStyle(Brand.textTertiary).font(Brand.mono(8))
+                                    }
+                                }
+                            }
+                        }
+                        .chartYAxis {
+                            AxisMarks { _ in
+                                AxisGridLine().foregroundStyle(Brand.hairline)
+                                AxisValueLabel().foregroundStyle(Brand.textTertiary).font(Brand.mono(8))
+                            }
+                        }
+                    }
+                    .frame(height: 170)
                 } else {
                     Chart {
                         ForEach(series, id: \.name) { s in

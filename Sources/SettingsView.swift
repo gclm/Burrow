@@ -43,10 +43,16 @@ struct SettingsView: View {
 
     // General
     @State private var fdaGranted = Privacy.hasFullDiskAccess()
+    /// FDA state when Settings opened. The running process only gains FDA
+    /// on relaunch, so a false→true flip (the user granted it just now)
+    /// means a relaunch is needed before scans can reach protected caches.
+    private let fdaAtOpen = Privacy.hasFullDiskAccess()
     @State private var appLanguage: String = Store.appLanguage
     @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var hideDockIcon: Bool = Store.hideDockIcon
     @State private var skipIntro: Bool = Store.skipIntro
+    @State private var notifyOnCompletion: Bool = Store.notifyOnCompletion
+    @State private var smartReminders: Bool = Store.smartRemindersEnabled
 
     // Maintenance
     @State private var whitelistPatterns: [String] = []
@@ -175,7 +181,11 @@ struct SettingsView: View {
                         : NSLocalizedString("Off. Safe scan in use — most system caches stay out of reach.", comment: ""),
                     granted: fdaGranted,
                     onOpenSettings: { Privacy.openFullDiskAccessSettings() },
-                    onCheck: { fdaGranted = Privacy.hasFullDiskAccess() })
+                    onCheck: { fdaGranted = Privacy.hasFullDiskAccess() },
+                    // Granted this session → macOS only hands FDA to a fresh
+                    // process, so offer a one-click relaunch instead of the
+                    // system's "quit it yourself" prompt.
+                    onRelaunch: (fdaGranted && !fdaAtOpen) ? { Privacy.relaunch() } : nil)
             }
 
             section("Language", "globe") {
@@ -214,6 +224,23 @@ struct SettingsView: View {
                 footnote("On: Burrow retreats to the menu bar when you close the window. Off: it stays in the Dock. With the menu-bar icon hidden, the Dock icon always stays — otherwise the app would be unreachable.")
                 toggleRow("Skip Intro Screens", isOn: $skipIntro) { Store.skipIntro = $0 }
                 footnote("Jumps past the tools' idle screens where a read-only preview can start right away (Clean starts its scan when you open the tab).")
+                HStack {
+                    Text(NSLocalizedString("Onboarding", comment: "")).font(Brand.sans(12)).foregroundStyle(Brand.textPrimary)
+                    Spacer()
+                    PillButton(title: "Replay onboarding", filled: false) {
+                        if #available(macOS 14, *) { AppDelegate.shared?.replayOnboarding() }
+                    }
+                }
+                footnote("Shows the first-run slides again (permissions, what's included). Finishing them marks onboarding done as usual.")
+            }
+
+            section("Notifications", "bell.badge") {
+                toggleRow("Notify when long operations finish", isOn: $notifyOnCompletion) {
+                    Store.notifyOnCompletion = $0
+                }
+                footnote("Clean, Optimize and Uninstall post a notice with the result (e.g. space freed) when they finish while Burrow is in the background. macOS asks for notification permission the first time one fires.")
+                toggleRow("Smart reminders", isOn: $smartReminders) { Store.smartRemindersEnabled = $0 }
+                footnote("Occasional, throttled nudges: it's been a couple of weeks since your last clean, free disk space dropped under 10%, or the Trash is holding more than 5 GB. Each fires at most once a week, never while you're in the app. Off by default.")
             }
 
             section("About", "info.circle") {

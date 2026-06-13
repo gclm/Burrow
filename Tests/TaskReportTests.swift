@@ -50,4 +50,19 @@ final class TaskReportTests: XCTestCase {
         XCTAssertEqual(summary.freeNow, "")
         XCTAssertEqual(result.groups.count, 1)
     }
+
+    // The one-line result shared by the Clean done-banner and the
+    // completion notification: real freed-space numbers when present,
+    // the tracked size otherwise.
+    func testCompletionLine_prefersRealFreedSpace() {
+        let real = TaskSummary(space: "1.02GB", items: "337", categories: "35",
+                               freeChange: "+1.39GB", freeNow: "2.50GB")
+        XCTAssertEqual(real.completionLine, "Freed +1.39GB · 2.50GB free now · 337 items")
+
+        let tracked = TaskSummary(space: "383.8MB", items: "372", categories: "20")
+        XCTAssertEqual(tracked.completionLine, "Cleaned 383.8MB · 372 items")
+
+        let empty = TaskSummary(space: "", items: "", categories: "")
+        XCTAssertEqual(empty.completionLine, "Done")
+    }
 }
