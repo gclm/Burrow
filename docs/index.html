@@ -316,7 +316,7 @@
 
   <!-- ===== HERO ===== -->
   <header class="hero">
-    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.7.0</span>
+    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.7.1</span>
     <h1>Burrow
       <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M14 74 a36 36 0 0 1 72 0 Z" fill="#F3ECDD"/><rect x="38" y="74" width="24" height="7" rx="3.5" fill="#121217"/></svg>
     </h1>
@@ -384,49 +384,35 @@
     <div class="sec-head wn-head">
       <div>
         <span class="sec-num">What's new · June 2026</span>
-        <h2 class="sec-title">New in 0.7.0</h2>
+        <h2 class="sec-title">New in 0.7.1</h2>
       </div>
       <a class="btn btn-out btn-sm" href="releases.html">All releases</a>
     </div>
 
     <div class="grid3 wn-grid">
       <article class="tcard" style="--c: var(--gold)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="16" width="8" height="5" rx="1"/></svg></div><div class="nm">Every tool redesigned</div></div>
-        <p class="ds">Onboarding, Clean, Software, Status, the menu-bar popover, Analyze and Settings — all rebuilt.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1114 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg></div><div class="nm">Freezes, fixed</div></div>
+        <p class="ds">The History view, slow startup, and typing in Uninstall &amp; Purge no longer lock the app — every app-hang from launch is gone.</p>
       </article>
       <article class="tcard" style="--c: var(--lilac)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/></svg></div><div class="nm">Review before you clean</div></div>
-        <p class="ds">Scan streams a live count-up into a per-item review screen; deselected paths are protected for exactly one run.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg></div><div class="nm">A crash, fixed</div></div>
+        <p class="ds">The menu-bar popover and Status mini-charts could segfault on a transition; they now draw as one stable shape.</p>
       </article>
       <article class="tcard" style="--c: var(--azure)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><div class="nm">New Software tab</div></div>
-        <p class="ds">Per-app uninstall review, a unified Updates list with source badges, and a startup inventory.</p>
-      </article>
-      <article class="tcard" style="--c: var(--coral)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20v-6M9 20V8M14 20v-9M19 20V5"/></svg></div><div class="nm">Bars + real GPU</div></div>
-        <p class="ds">History CPU, GPU and health render as bars, and GPU usage is read natively on Apple Silicon.</p>
-      </article>
-      <article class="tcard" style="--c: var(--green)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div><div class="nm">Finish-line alerts</div></div>
-        <p class="ds">Get notified when a clean, optimize or uninstall finishes, plus opt-in low-disk and Trash reminders.</p>
-      </article>
-      <article class="tcard" style="--c: var(--teal)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg></div><div class="nm">Sharper agent tools</div></div>
-        <p class="ds">MCP cleanup tools share the app's gate, return structured summaries, and surface data-freshness on a stable contract.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div><div class="nm">Lighter live metrics</div></div>
+        <p class="ds">The HUD, Status and Activity panels share one refresh pump now, and GPU history bars draw again on Apple Silicon.</p>
       </article>
     </div>
 
-    <div class="extra-label mono">// also tightened in 0.7.0</div>
+    <div class="extra-label mono">// also tightened in 0.7.1</div>
     <div class="wn-chips">
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>One-click relaunch when Full Disk Access is granted</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>First-run onboarding checks the mo engine + version</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Compact, scrollable process table</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Keep Screen On · Clean Screen · global shortcuts</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>~230 strings localized in 简体中文 / 繁體中文</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Truthful Touch ID copy</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Dashboard survives a bad metrics sample (skipped + counted)</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>History auto-refresh is demand-driven — no idle timer</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Deepened, test-covered mo runner / metrics / actions core</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>History view no longer freezes on wide time ranges</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Faster launch — mo discovery moved off the main thread</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Fixed a crash opening the menu-bar popover charts</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Smooth typing during Uninstall &amp; Purge</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Process-row Quit/Force-Kill menu no longer rebuilt every refresh</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>GPU history bars draw again on Apple Silicon</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>One shared refresh pump for HUD / Status / Activity</span>
     </div>
     <!-- WN:END -->
   </section>

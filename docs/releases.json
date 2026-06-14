@@ -2,6 +2,41 @@
   "_comment": "Source of truth for the site's release history. Newest first. Edit this, then run `python3 scripts/site-release.py` to regenerate the homepage 'New in X' section and releases.html. Icons/colors: run `python3 scripts/site-release.py --list-icons`.",
   "releases": [
     {
+      "version": "0.7.1",
+      "date": "2026-06-14",
+      "tag": "v0.7.1",
+      "tagline": "A stability pass — every freeze and the crash reported since the 0.7.0 redesign, fixed.",
+      "highlights": [
+        {
+          "icon": "gauge",
+          "color": "gold",
+          "title": "Freezes, fixed",
+          "line": "The History view, slow startup, and typing in Uninstall & Purge no longer lock the app — every app-hang from launch is gone."
+        },
+        {
+          "icon": "shield",
+          "color": "lilac",
+          "title": "A crash, fixed",
+          "line": "The menu-bar popover and Status mini-charts could segfault on a transition; they now draw as one stable shape."
+        },
+        {
+          "icon": "pulse",
+          "color": "azure",
+          "title": "Lighter live metrics",
+          "line": "The HUD, Status and Activity panels share one refresh pump now, and GPU history bars draw again on Apple Silicon."
+        }
+      ],
+      "chips": [
+        "History view no longer freezes on wide time ranges",
+        "Faster launch — mo discovery moved off the main thread",
+        "Fixed a crash opening the menu-bar popover charts",
+        "Smooth typing during Uninstall & Purge",
+        "Process-row Quit/Force-Kill menu no longer rebuilt every refresh",
+        "GPU history bars draw again on Apple Silicon",
+        "One shared refresh pump for HUD / Status / Activity"
+      ]
+    },
+    {
       "version": "0.7.0",
       "date": "2026-06-13",
       "tag": "v0.7.0",

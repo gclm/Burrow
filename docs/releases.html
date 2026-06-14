@@ -108,13 +108,45 @@
 <header class="hero page">
   <h1>Releases</h1>
   <p>Every version at a glance — what it added, fixed, and tightened. Full notes for each live on GitHub.</p>
-  <p class="count">8 releases · latest 0.7.0 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener" style="color:var(--ink-2); text-decoration:underline; text-underline-offset:2px;">GitHub releases ↗</a></p>
+  <p class="count">9 releases · latest 0.7.1 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener" style="color:var(--ink-2); text-decoration:underline; text-underline-offset:2px;">GitHub releases ↗</a></p>
 </header>
 
 <main class="page">
+    <article class="rel card" id="v0.7.1">
+      <header class="rel-head">
+        <h2 class="ver">0.7.1<span class="latest">latest</span></h2>
+        <span class="date mono">Jun 14, 2026</span>
+        <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.7.1" target="_blank" rel="noopener">full notes ↗</a>
+      </header>
+      <p class="tagline">A stability pass — every freeze and the crash reported since the 0.7.0 redesign, fixed.</p>
+      <div class="hls">
+        <div class="hl" style="--c: var(--gold)">
+          <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1114 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg></div>
+          <div><b>Freezes, fixed</b><p>The History view, slow startup, and typing in Uninstall &amp; Purge no longer lock the app — every app-hang from launch is gone.</p></div>
+        </div>
+        <div class="hl" style="--c: var(--lilac)">
+          <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg></div>
+          <div><b>A crash, fixed</b><p>The menu-bar popover and Status mini-charts could segfault on a transition; they now draw as one stable shape.</p></div>
+        </div>
+        <div class="hl" style="--c: var(--azure)">
+          <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div>
+          <div><b>Lighter live metrics</b><p>The HUD, Status and Activity panels share one refresh pump now, and GPU history bars draw again on Apple Silicon.</p></div>
+        </div>
+      </div>
+      <div class="wn-chips">
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>History view no longer freezes on wide time ranges</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Faster launch — mo discovery moved off the main thread</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Fixed a crash opening the menu-bar popover charts</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Smooth typing during Uninstall &amp; Purge</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Process-row Quit/Force-Kill menu no longer rebuilt every refresh</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>GPU history bars draw again on Apple Silicon</span>
+        <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>One shared refresh pump for HUD / Status / Activity</span>
+      </div>
+    </article>
+
     <article class="rel card" id="v0.7.0">
       <header class="rel-head">
-        <h2 class="ver">0.7.0<span class="latest">latest</span></h2>
+        <h2 class="ver">0.7.0</h2>
         <span class="date mono">Jun 13, 2026</span>
         <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.7.0" target="_blank" rel="noopener">full notes ↗</a>
       </header>
