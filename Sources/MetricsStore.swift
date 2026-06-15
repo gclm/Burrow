@@ -366,6 +366,21 @@ struct MetricsStore {
         }
     }
 
+    // MARK: Per-process CPU history
+
+    /// Per-process CPU samples over the window: process name → one CPU% value
+    /// per snapshot it appeared in. The input to anomaly baselining (A.2) —
+    /// recent vs prior-period medians per process.
+    func processCPUSamples(_ w: Window, maxPoints: Int = 720) -> [String: [Double]] {
+        var out: [String: [Double]] = [:]
+        for s in snapshots(w, maxPoints: maxPoints).snapshots {
+            for p in (s.status.topProcesses ?? []) {
+                out[p.name, default: []].append(p.cpu)
+            }
+        }
+        return out
+    }
+
     // MARK: Reader staleness
 
     struct ReaderStatus {
