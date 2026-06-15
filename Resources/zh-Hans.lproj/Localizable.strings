@@ -293,6 +293,8 @@
 "Report" = "报告";
 "Doctor" = "诊断";
 "Diagnostics" = "系统诊断";
+"Dev hygiene" = "开发清理";
+"No developer caches found." = "未发现开发者缓存。";
 "Explain" = "解读";
 
 /* Language switch */
