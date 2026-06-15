@@ -30,4 +30,24 @@ final class StartupWatcherTests: XCTestCase {
         XCTAssertTrue(StartupWatcher.newlyAppeared(
             previousIDs: ["/a", "/old"], current: [item("/a")]).isEmpty)
     }
+
+    // MARK: check (baseline fold)
+
+    func testCheck_firstRun_alertsNothingButSetsBaseline() {
+        let r = StartupWatcher.check(previousBaselineJSON: nil, current: [item("/a"), item("/b")])
+        XCTAssertTrue(r.newItems.isEmpty, "no baseline → don't alarm on everything")
+        XCTAssertTrue(r.baselineJSON.contains("/a") && r.baselineJSON.contains("/b"))
+    }
+
+    func testCheck_subsequentRun_reportsAppearance() {
+        let first = StartupWatcher.check(previousBaselineJSON: nil, current: [item("/a")])
+        let second = StartupWatcher.check(previousBaselineJSON: first.baselineJSON,
+                                          current: [item("/a"), item("/evil")])
+        XCTAssertEqual(second.newItems.map(\.id), ["/evil"])
+    }
+
+    func testCheck_emptyBaseline_treatedAsFirstRun() {
+        let r = StartupWatcher.check(previousBaselineJSON: "[]", current: [item("/a")])
+        XCTAssertTrue(r.newItems.isEmpty)
+    }
 }

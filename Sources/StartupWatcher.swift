@@ -21,4 +21,23 @@ enum StartupWatcher {
         let added = Set(InventoryDiff.diff(old: previousIDs, new: current.map(\.id)).added)
         return current.filter { added.contains($0.id) }
     }
+
+    /// Fold a fresh scan against the persisted baseline JSON (a `[String]` of
+    /// ids). First run — no baseline, or an empty one — alerts on nothing and
+    /// just establishes the baseline; only later scans report appearances.
+    /// Returns what to alert on plus the baseline JSON to persist.
+    static func check(previousBaselineJSON: String?,
+                      current: [StartupItem]) -> (newItems: [StartupItem], baselineJSON: String) {
+        let baseline = encode(current.map(\.id))
+        guard let prev = previousBaselineJSON,
+              let prevIDs = try? JSONDecoder().decode([String].self, from: Data(prev.utf8)),
+              !prevIDs.isEmpty else {
+            return ([], baseline)
+        }
+        return (newlyAppeared(previousIDs: prevIDs, current: current), baseline)
+    }
+
+    private static func encode(_ ids: [String]) -> String {
+        (try? JSONEncoder().encode(ids)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
 }

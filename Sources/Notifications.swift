@@ -149,12 +149,41 @@ final class BurrowNotifier: NSObject {
     func startReminders() {
         guard !inert, reminderTimer == nil else { return }
         let timer = Timer(timeInterval: 3_600, repeats: true) { _ in
-            Task { @MainActor in BurrowNotifier.shared.checkReminders() }
+            Task { @MainActor in
+                BurrowNotifier.shared.checkReminders()
+                BurrowNotifier.shared.checkStartupWatcher()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         reminderTimer = timer
         DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self] in
             self?.checkReminders()
+            self?.checkStartupWatcher()
+        }
+    }
+
+    /// New-persistence-item watcher (D.12). Scans login items / LaunchAgents
+    /// off the main thread, diffs against the stored baseline, and posts once
+    /// per newly-appeared item. First run only establishes the baseline (no
+    /// alarm); gated by its own default-on toggle, independent of the
+    /// taste-based smart reminders.
+    func checkStartupWatcher() {
+        guard !inert, Store.watchStartupItems else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let items = StartupInventory.scanLive()
+            Task { @MainActor in
+                guard let self else { return }
+                let prev = Store.startupBaselineJSON
+                let result = StartupWatcher.check(previousBaselineJSON: prev.isEmpty ? nil : prev,
+                                                  current: items)
+                Store.startupBaselineJSON = result.baselineJSON
+                for item in result.newItems.prefix(5) {
+                    self.postReminder(
+                        title: NSLocalizedString("A new startup item appeared", comment: ""),
+                        body: String(format: NSLocalizedString("“%@” now launches automatically. If you didn't add it, review it.", comment: ""), item.label),
+                        pane: "apps", id: "burrow-startup-\(item.id)")
+                }
+            }
         }
     }
 

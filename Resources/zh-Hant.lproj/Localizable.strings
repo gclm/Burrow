@@ -300,6 +300,8 @@
 "Listening ports" = "監聽連接埠";
 "See who's listening." = "看看誰在監聽。";
 "Quit this process?" = "退出此程序？";
+"A new startup item appeared" = "出現了新的啟動項";
+"“%@” now launches automatically. If you didn't add it, review it." = "“%@” 現在會自動啟動。如果不是你新增的，請檢查它。";
 "Explain" = "解讀";
 
 /* Language switch */

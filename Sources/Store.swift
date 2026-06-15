@@ -372,6 +372,21 @@ enum Store {
         set { write(newValue, "smart_reminders_enabled") }
     }
 
+    /// New-LaunchAgent / login-item watcher (D.12). On by default — a
+    /// persistence item appearing is a lightweight security signal most
+    /// utilities miss, so this is one of the few default-on notices.
+    static var watchStartupItems: Bool {
+        get { d.object(forKey: "watch_startup_items") as? Bool ?? true }
+        set { write(newValue, "watch_startup_items") }
+    }
+
+    /// Persisted baseline for the startup watcher — a JSON `[String]` of item
+    /// ids. Not user-facing; it's the watcher's diff anchor.
+    static var startupBaselineJSON: String {
+        get { d.string(forKey: "startup_baseline_json") ?? "" }
+        set { write(newValue, "startup_baseline_json") }
+    }
+
     // Reminder throttle state (not user-facing): hysteresis flags so a
     // metric hovering at its threshold can't flap, timestamps for the
     // weekly cooldowns. See ReminderRules (Notifications.swift).

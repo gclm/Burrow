@@ -300,6 +300,8 @@
 "Listening ports" = "监听端口";
 "See who's listening." = "看看谁在监听。";
 "Quit this process?" = "退出此进程？";
+"A new startup item appeared" = "出现了新的启动项";
+"“%@” now launches automatically. If you didn't add it, review it." = "“%@” 现在会自动启动。如果不是你添加的，请检查它。";
 "Explain" = "解读";
 
 /* Language switch */
