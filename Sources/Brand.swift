@@ -2,11 +2,11 @@
 //  Brand.swift
 //  Burrow
 //
-//  Burrow's visual language — the caezium house identity: warm cream ink
-//  on a charcoal ground, a single peach accent, soft secondary tints, and
-//  generous corner radii. It matches the project site
-//  (burrow.henryzh.dev) so the app and the landing page read as one
-//  product — our own look, not borrowed from anyone.
+//  Burrow's visual language — a cool graphite ground, crisp off-white ink,
+//  and a single electric-blue accent for primary emphasis. Each tool still
+//  keeps its own vivid accent (teal / violet / coral / azure / gold) for
+//  active states, so the app reads as one calm surface with bright,
+//  purposeful pops — not a window that re-tints itself per tool.
 //
 //  This is deliberately separate from the legacy `Theme` enum so the
 //  redesign can land without disturbing older views that still reference
@@ -32,57 +32,57 @@ extension Color {
 }
 
 enum Brand {
-    // MARK: Ground — the charcoal the whole app sits on (matches the site)
-    static let base      = Color(hex: 0x121217)   // site --bg
-    static let baseSoft  = Color(hex: 0x16161D)   // site --bg-soft
-    static let nearBlack = Color(hex: 0x0E0E13)   // legacy name, now warm-charcoal
+    // MARK: Ground — a cool graphite the whole app sits on
+    static let base      = Color(hex: 0x0E0F13)
+    static let baseSoft  = Color(hex: 0x15171C)
+    static let nearBlack = Color(hex: 0x0A0B0D)
 
-    // MARK: Text & surfaces — warm cream ink on cream-tinted glass (not white)
-    static let ink           = Color(hex: 0xF3ECDD)            // the cream mark
-    static let textPrimary   = Color(hex: 0xF3ECDD)
-    static let textSecondary = Color(hex: 0xF3ECDD, alpha: 0.66)
-    static let textTertiary  = Color(hex: 0xF3ECDD, alpha: 0.42)
+    // MARK: Text & surfaces — crisp cool off-white on neutral glass
+    static let ink           = Color(hex: 0xE9EAEE)
+    static let textPrimary   = Color(hex: 0xE9EAEE)
+    static let textSecondary = Color(hex: 0xE9EAEE, alpha: 0.62)
+    static let textTertiary  = Color(hex: 0xE9EAEE, alpha: 0.40)
 
-    static let hairline      = Color(hex: 0xF3ECDD, alpha: 0.14)    // site --hair
-    static let cardFill      = Color(hex: 0xF3ECDD, alpha: 0.045)   // site --surface
-    static let cardFillHover = Color(hex: 0xF3ECDD, alpha: 0.09)
-    static let chipFill      = Color(hex: 0xF3ECDD, alpha: 0.09)
-    static let trackFill     = Color(hex: 0xF3ECDD, alpha: 0.10)
+    static let hairline      = Color.white.opacity(0.09)
+    static let cardFill      = Color.white.opacity(0.045)
+    static let cardFillHover = Color.white.opacity(0.08)
+    static let chipFill      = Color.white.opacity(0.08)
+    static let trackFill     = Color.white.opacity(0.10)
 
-    // MARK: Accent — one peach for emphasis (NOT a per-tool window wash)
-    static let accent   = Color(hex: 0xD9A066)   // site --accent (peach)
-    static let onAccent = Color(hex: 0x241B12)   // site --on-accent (espresso)
-    static let lilac    = Color(hex: 0xD6C6FF)   // site --lilac
-    static let apricot  = Color(hex: 0xFFD3B6)   // site --apricot
-    static let mint     = Color(hex: 0xC9F2E6)   // site --mint
+    // MARK: Accent — one electric blue for primary emphasis
+    static let accent   = Color(hex: 0x5B8DEF)
+    static let onAccent = Color(hex: 0x0A0E16)   // near-black text on any bright accent
+    static let lilac    = Color(hex: 0xB7B2FF)
+    static let apricot  = Color(hex: 0xFFD3B6)
+    static let mint     = Color(hex: 0x8FE9D0)
 
-    // MARK: Metric accents (monitor colour-coding — matches the site set)
+    // MARK: Metric / per-tool accents (vivid pops on the graphite ground)
     static let green  = Color(hex: 0x57D58E)
     static let gold   = Color(hex: 0xE6A93C)
     static let amber  = Color(hex: 0xF0B24A)
-    static let orange = Color(hex: 0xF0714E)   // site --coral
-    static let blue   = Color(hex: 0x4FA3E3)   // site --azure
+    static let orange = Color(hex: 0xF0714E)
+    static let blue   = Color(hex: 0x4FA3E3)
     static let red    = Color(hex: 0xF0604E)
     static let teal   = Color(hex: 0x35C2A5)
     static let violet = Color(hex: 0x8E84F0)
     static let moss   = Color(hex: 0x6FB06A)
     static let ginger = Color(hex: 0xD98C5F)
 
-    // MARK: Brand creams (kept for older callers)
+    // MARK: Brand mark colours (the Burrow disc keeps a warm pop)
     static let cream    = Color(hex: 0xF3ECDD)
-    static let espresso = Color(hex: 0x241B12)
+    static let espresso = Color(hex: 0x1A140E)
 
-    // MARK: Shape — over-rounded, the house signature (app-scaled --r-* set)
+    // MARK: Shape — rounded, the house signature
     static let rSmall: CGFloat = 12
-    static let rCard:  CGFloat = 20
-    static let rLarge: CGFloat = 28
+    static let rCard:  CGFloat = 18
+    static let rLarge: CGFloat = 26
 
-    /// A stable charcoal veil drawn over the window vibrancy — identical on
+    /// A stable graphite veil drawn over the window vibrancy — identical on
     /// every pane, so switching tools no longer re-tints the whole window in
     /// that tool's colour. The per-tool hue now lives only in small accents.
     static var windowVeil: LinearGradient {
         LinearGradient(
-            colors: [Color(hex: 0x16161D, alpha: 0.60), Color(hex: 0x101015, alpha: 0.80)],
+            colors: [Color(hex: 0x15171C, alpha: 0.55), Color(hex: 0x0B0C10, alpha: 0.82)],
             startPoint: .top, endPoint: .bottom)
     }
 

@@ -70,19 +70,28 @@ struct RootView: View {
             // longer re-tints the whole window in that tool's colour.
             Brand.windowVeil.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                TopNav(selected: $pane)
-                    .padding(.top, 13)
-                    .padding(.bottom, 10)
-                if let release = appUpdate.available {
-                    UpdateBanner(release: release,
-                                 onDownload: { NSWorkspace.shared.open(release.url) },
-                                 onDismiss: { appUpdate.dismiss() })
-                        .padding(.horizontal, 18).padding(.bottom, 8)
-                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            HStack(spacing: 0) {
+                // Floating left rail replaces the top tab bar — the structural
+                // break from a horizontal pill strip. Padded clear of the
+                // traffic lights and detached from the window edges so it reads
+                // as a floating panel, not a flush native sidebar.
+                FloatingRail(selected: $pane)
+                    .padding(.leading, 14)
+                    .padding(.top, 40)
+                    .padding(.bottom, 14)
+
+                VStack(spacing: 0) {
+                    if let release = appUpdate.available {
+                        UpdateBanner(release: release,
+                                     onDownload: { NSWorkspace.shared.open(release.url) },
+                                     onDismiss: { appUpdate.dismiss() })
+                            .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 4)
+                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                    }
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 16)
             }
         }
         .frame(minWidth: 940, minHeight: 640)
