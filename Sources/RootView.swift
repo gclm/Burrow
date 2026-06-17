@@ -66,7 +66,9 @@ struct RootView: View {
     var body: some View {
         ZStack {
             VisualEffectBackground().ignoresSafeArea()
-            pane.scrim.ignoresSafeArea()
+            // One stable charcoal ground on every pane — switching tools no
+            // longer re-tints the whole window in that tool's colour.
+            Brand.windowVeil.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 TopNav(selected: $pane)
