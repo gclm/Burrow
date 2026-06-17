@@ -138,6 +138,7 @@ struct RootView: View {
             CleanHub().tabVisible(pane == .tool(.clean))
             OptimizeView().tabVisible(pane == .tool(.optimize))
             PortsView(isActive: pane == .tool(.ports)).tabVisible(pane == .tool(.ports))
+            ConnectivityView(isActive: pane == .tool(.connectivity)).tabVisible(pane == .tool(.connectivity))
             TuneUpView(isActive: pane == .tool(.tuneup)).tabVisible(pane == .tool(.tuneup))
 
             // Gated on window visibility too: these two carry live timers

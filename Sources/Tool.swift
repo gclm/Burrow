@@ -12,7 +12,7 @@
 import SwiftUI
 
 enum Tool: String, CaseIterable, Identifiable {
-    case clean, purge, installer, apps, optimize, analyze, status, ports, tuneup
+    case clean, purge, installer, apps, optimize, analyze, status, ports, connectivity, tuneup
 
     var id: String { rawValue }
 
@@ -21,7 +21,7 @@ enum Tool: String, CaseIterable, Identifiable {
     /// optimize, then apps / analyze. The .purge/.installer cases live on for
     /// the hub cards, MCP actions, and Explain deep-links. The live dashboard
     /// isn't a tool anymore — it's Home, reached by the Burrow mark.
-    static let navOrder: [Tool] = [.clean, .optimize, .apps, .analyze, .ports, .tuneup]
+    static let navOrder: [Tool] = [.clean, .optimize, .apps, .analyze, .ports, .connectivity, .tuneup]
 
     /// Lowercase tab label (matches the instrument-panel voice).
     var label: String { NSLocalizedString(rawValue, comment: "") }
@@ -37,6 +37,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .analyze:   return NSLocalizedString("Analyze", comment: "")
         case .status:    return NSLocalizedString("Status", comment: "")
         case .ports:     return NSLocalizedString("Ports", comment: "")
+        case .connectivity: return NSLocalizedString("Get Online", comment: "")
         case .tuneup:    return NSLocalizedString("Tune-Up", comment: "")
         }
     }
@@ -51,6 +52,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .analyze:   return "square.grid.2x2"
         case .status:    return "waveform.path.ecg"
         case .ports:     return "network"
+        case .connectivity: return "wifi"
         case .tuneup:    return "slider.horizontal.3"
         }
     }
@@ -66,6 +68,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .analyze:   return Color(hex: 0x4FA3E3) // azure
         case .status:    return Color(hex: 0xE6A93C) // gold
         case .ports:     return Color(hex: 0xB58BD6) // lilac
+        case .connectivity: return Color(hex: 0x4FC3D9) // cyan
         case .tuneup:    return Color(hex: 0x5AA98B) // sage
         }
     }
@@ -82,6 +85,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .analyze:   return Color(hex: 0x0E1F2E)
         case .status:    return Color(hex: 0x241D11)
         case .ports:     return Color(hex: 0x1B1426)
+        case .connectivity: return Color(hex: 0x0E2630)
         case .tuneup:    return Color(hex: 0x12231D)
         }
     }
@@ -103,6 +107,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .analyze:   return NSLocalizedString("Map every chamber below.", comment: "")
         case .status:    return NSLocalizedString("Every pulse of the den.", comment: "")
         case .ports:     return NSLocalizedString("See who's listening.", comment: "")
+        case .connectivity: return NSLocalizedString("Find your way back to the surface.", comment: "")
         case .tuneup:    return NSLocalizedString("One pass, a tidier den.", comment: "")
         }
     }
