@@ -42,12 +42,13 @@ enum AppSort: String, CaseIterable {
     var label: String { NSLocalizedString(rawValue, comment: "") }
 }
 
-enum SoftwareSegment { case uninstall, updates, startup }
+enum SoftwareSegment { case uninstall, updates, startup, services }
 
 struct SoftwareView: View {
     @StateObject private var model = SoftwareModel()
     @StateObject private var updates = UpdatesModel()
     @StateObject private var startup = StartupModel()
+    @StateObject private var services = BrewServicesModel()
     var isActive: Bool = true
 
     var body: some View {
@@ -130,6 +131,7 @@ struct SoftwareView: View {
             seg("Uninstall", .uninstall)
             seg("Updates", .updates)
             seg("Startup", .startup)
+            if BrewClient.isInstalled { seg("Services", .services) }
         }
         .padding(3)
         .background(Capsule().fill(Color.black.opacity(0.22)))
@@ -188,6 +190,8 @@ struct SoftwareView: View {
             UpdatesView(model: updates, apps: model.apps)
         case .startup:
             StartupView(model: startup)
+        case .services:
+            BrewServicesView(model: services)
         case .uninstall:
             if model.loading {
                 VStack { Spacer(); ProgressView("Reading installed apps…").controlSize(.large).tint(Tool.apps.accent)
