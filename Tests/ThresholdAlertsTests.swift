@@ -46,4 +46,21 @@ final class ThresholdAlertsTests: XCTestCase {
         XCTAssertEqual(Set(ThresholdAlerts.evaluate(bad, ts: 0, states: [:]).fires.map(\.ruleID)),
                        ["cpu", "memory"])
     }
+
+    func testEvaluate_respectsConfiguredThresholds() throws {
+        // 65% CPU is below the 90 default → silent…
+        let warm = try status(cpu: 65, mem: 40)
+        XCTAssertTrue(ThresholdAlerts.evaluate(warm, ts: 0, states: [:]).fires.isEmpty)
+        // …but fires once the user lowers the CPU threshold to 60.
+        let lowered = ThresholdAlerts.evaluate(warm, ts: 0, states: [:], cpuHigh: 60, memHigh: 90)
+        XCTAssertEqual(lowered.fires.map(\.ruleID), ["cpu"])
+    }
+
+    func testRules_lowEdgeDerivesFromHigh_matchingLegacyDefaults() {
+        // The default 90/90 must reproduce the original hard-coded low edges
+        // (cpu 70, memory 75) so behavior is unchanged for existing users.
+        let r = ThresholdAlerts.rules()
+        XCTAssertEqual(r.first { $0.id == "cpu" }?.low, 70)
+        XCTAssertEqual(r.first { $0.id == "memory" }?.low, 75)
+    }
 }

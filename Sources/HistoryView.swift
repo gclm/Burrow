@@ -438,8 +438,12 @@ struct HistoryView: View {
                         GeometryReader { geo in
                             if let anchor = proxy.plotFrame {
                                 let plot = geo[anchor]
-                                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                                    .highPriorityGesture(DragGesture(minimumDistance: 4)
+                                // A real NSView (mouseDownCanMoveWindow=false) is the hit
+                                // target here, so AppKit doesn't steal the drag to move the
+                                // window (isMovableByWindowBackground) before this gesture fires.
+                                WindowDragBlocker()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .highPriorityGesture(DragGesture(minimumDistance: 2)
                                         .onChanged { v in
                                             if spikeDragStart == nil { spikeDragStart = v.startLocation.x - plot.minX }
                                             spikeDragCurrent = v.location.x - plot.minX

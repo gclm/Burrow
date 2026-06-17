@@ -403,6 +403,20 @@ enum Store {
         set { write(newValue, "threshold_alerts_enabled") }
     }
 
+    /// The CPU-usage % at which a sustained-high alert fires (the rule's `high`
+    /// edge; `low` hysteresis is derived). Default 90, clamped to a sane band so
+    /// a stepper can't set a useless 0% / 100% trigger.
+    static var cpuAlertThreshold: Int {
+        get { let v = d.object(forKey: "cpu_alert_threshold") as? Int ?? 90; return min(100, max(50, v)) }
+        set { write(min(100, max(50, newValue)), "cpu_alert_threshold") }
+    }
+
+    /// The memory-used % at which a sustained-high alert fires. Default 90.
+    static var memAlertThreshold: Int {
+        get { let v = d.object(forKey: "mem_alert_threshold") as? Int ?? 90; return min(100, max(50, v)) }
+        set { write(min(100, max(50, newValue)), "mem_alert_threshold") }
+    }
+
     /// Bearer token for the query server's SSE /events stream (B.6). Generated
     /// once and persisted; agents pass it as `?token=…`. The server is loopback-
     /// only, so this just stops other local processes/pages from subscribing.

@@ -22,7 +22,9 @@ final class ThresholdMonitor {
 
     func evaluate(_ s: MoleStatus, at: Date) {
         guard !inert, Store.thresholdAlertsEnabled else { return }
-        let r = ThresholdAlerts.evaluate(s, ts: Int(at.timeIntervalSince1970), states: states)
+        let r = ThresholdAlerts.evaluate(s, ts: Int(at.timeIntervalSince1970), states: states,
+                                         cpuHigh: Double(Store.cpuAlertThreshold),
+                                         memHigh: Double(Store.memAlertThreshold))
         states = r.states
         for fire in r.fires {
             // thresholdAlert is main-actor-isolated; hop to it (we're already

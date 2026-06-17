@@ -55,6 +55,8 @@ struct SettingsView: View {
     @State private var smartReminders: Bool = Store.smartRemindersEnabled
     @State private var watchStartupItems: Bool = Store.watchStartupItems
     @State private var thresholdAlerts: Bool = Store.thresholdAlertsEnabled
+    @State private var cpuAlertThreshold: Int = Store.cpuAlertThreshold
+    @State private var memAlertThreshold: Int = Store.memAlertThreshold
     @State private var showRestore = false
     @State private var autoCheckUpdates: Bool = Store.autoCheckForUpdates
     @State private var cameraMicIndicator: Bool = Store.cameraMicIndicatorEnabled
@@ -257,6 +259,18 @@ struct SettingsView: View {
                 footnote("Notifies you when a new login item or LaunchAgent appears — a lightweight persistence check. On by default.")
                 toggleRow("CPU / memory threshold alerts", isOn: $thresholdAlerts) { Store.thresholdAlertsEnabled = $0 }
                 footnote("Notifies once per episode when CPU stays pegged or memory pressure runs high. Off by default.")
+                if thresholdAlerts {
+                    Stepper(value: $cpuAlertThreshold, in: 50...100, step: 5) {
+                        Text(String(format: NSLocalizedString("Alert when CPU usage stays above %d%%", comment: ""), cpuAlertThreshold))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: cpuAlertThreshold) { _, v in Store.cpuAlertThreshold = v }
+                    Stepper(value: $memAlertThreshold, in: 50...100, step: 5) {
+                        Text(String(format: NSLocalizedString("Alert when memory used stays above %d%%", comment: ""), memAlertThreshold))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: memAlertThreshold) { _, v in Store.memAlertThreshold = v }
+                }
             }
 
             section("About", "info.circle") {
