@@ -27,4 +27,51 @@ final class PortInspectorTests: XCTestCase {
         XCTAssertEqual(s.map(\.port), [3000, 3000, 8080])
         XCTAssertEqual(s.map(\.process), ["a", "z", "b"])
     }
+
+    // MARK: - Extended suite: lookup, conflicts, filter
+
+    private func mk(_ port: Int, pid: Int, _ state: ConnState = .listen,
+                    proc: String = "proc", remote: String? = nil, rport: Int? = nil) -> ListeningPort {
+        ListeningPort(pid: pid, process: proc, port: port, proto: "tcp", address: "*", uid: 501,
+                      state: state, remoteAddress: remote, remotePort: rport)
+    }
+
+    func testPortLookup_knownAndUnknown() {
+        XCTAssertEqual(PortLookup.service(for: 5432), "PostgreSQL")
+        XCTAssertEqual(PortLookup.service(for: 22), "SSH")
+        XCTAssertNil(PortLookup.service(for: 54321))
+    }
+
+    func testConflicts_flagsSamePortDifferentPids() {
+        let ports = [mk(3000, pid: 10), mk(3000, pid: 11), mk(8080, pid: 12)]
+        XCTAssertEqual(PortInspector.conflicts(ports), [3000])
+    }
+
+    func testConflicts_ignoresSamePidAndEstablished() {
+        let ports = [
+            mk(3000, pid: 10), mk(3000, pid: 10),                       // one owner, listed twice
+            mk(443, pid: 20, .established, remote: "1.2.3.4", rport: 443),
+            mk(443, pid: 21, .established, remote: "5.6.7.8", rport: 443),  // established ≠ conflict
+        ]
+        XCTAssertTrue(PortInspector.conflicts(ports).isEmpty)
+    }
+
+    func testFilter_byState() {
+        let ports = [mk(3000, pid: 1), mk(443, pid: 2, .established, remote: "1.1.1.1", rport: 443)]
+        XCTAssertEqual(PortInspector.filter(ports, .listening, query: "").count, 1)
+        XCTAssertEqual(PortInspector.filter(ports, .established, query: "").first?.port, 443)
+        XCTAssertEqual(PortInspector.filter(ports, .all, query: "").count, 2)
+    }
+
+    func testFilter_byQuery_matchesPortProcessServiceAndRemote() {
+        let ports = [
+            mk(5432, pid: 1, proc: "postgres"),
+            mk(8080, pid: 2, proc: "node"),
+            mk(443, pid: 3, .established, proc: "curl", remote: "93.184.216.34", rport: 443),
+        ]
+        XCTAssertEqual(PortInspector.filter(ports, .all, query: "node").map(\.port), [8080])
+        XCTAssertEqual(PortInspector.filter(ports, .all, query: "5432").map(\.port), [5432])
+        XCTAssertEqual(PortInspector.filter(ports, .all, query: "postgre").map(\.port), [5432]) // service label
+        XCTAssertEqual(PortInspector.filter(ports, .all, query: "93.184").map(\.port), [443])   // remote host
+    }
 }
