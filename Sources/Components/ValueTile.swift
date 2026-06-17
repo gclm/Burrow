@@ -49,20 +49,20 @@ struct ValueTile: View {
 
     private var card: some View {
         GlassCard(minHeight: minHeight) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 6) {
                     Eyebrow(text: eyebrow, glyph: glyph, color: accent)
                     Spacer(minLength: 4)
                     if let c = chip { Chip(text: c.0, color: c.1) }
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(value).font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textPrimary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value).font(Brand.mono(30, .semibold)).foregroundStyle(Brand.textPrimary)
                     if !unit.isEmpty {
-                        Text(unit).font(Brand.mono(12)).foregroundStyle(Brand.textSecondary)
+                        Text(unit).font(Brand.mono(13)).foregroundStyle(Brand.textSecondary)
                     }
                 }
-                chart.frame(height: 30)
-                Spacer(minLength: 2)
+                chart.frame(height: 34)
+                Spacer(minLength: 0)
                 if let f = footnote {
                     Text(f).font(Brand.mono(10)).foregroundStyle(Brand.textTertiary).lineLimit(1)
                 }

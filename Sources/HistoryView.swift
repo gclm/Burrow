@@ -225,7 +225,7 @@ struct HistoryView: View {
             toolbar.padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 12)
                 Rectangle().fill(Brand.hairline).frame(height: 1)
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 13), GridItem(.flexible(), spacing: 13)], spacing: 13) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                         chartCard("CPU usage", "%", [("usage", snapshot.cpuUsage, Brand.green)], marks: .bars)
                         chartCard("CPU load", "1m avg", [("load1", snapshot.cpuLoad1, Brand.orange)])
                         chartCard("Memory", snapshot.memoryPressure.isEmpty ? "% used" : snapshot.memoryPressure,
@@ -247,7 +247,7 @@ struct HistoryView: View {
                         chartCard("Health score", "0–100", [("health", snapshot.healthScore, Brand.gold)], marks: .bars)
                         topProcessesCard
                     }
-                    .padding(16)
+                    .padding(20)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -311,15 +311,15 @@ struct HistoryView: View {
                 let on = r == range
                 Button { range = r } label: {
                     Text(r.label).font(Brand.mono(11, on ? .semibold : .regular))
-                        .foregroundStyle(on ? Color.black : Brand.textSecondary)
+                        .foregroundStyle(on ? Brand.base : Brand.textSecondary)
                         .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background { if on { Capsule().fill(.white) } }
+                        .background { if on { Capsule().fill(Brand.textPrimary) } }
                         .contentShape(Capsule())
                 }.buttonStyle(.plain)
             }
         }
         .padding(3)
-        .background(Capsule().fill(Color.black.opacity(0.22)))
+        .background(Capsule().fill(Brand.chipFill))
         .overlay(Capsule().strokeBorder(Brand.hairline, lineWidth: 1))
     }
 
@@ -358,7 +358,7 @@ struct HistoryView: View {
         return GlassCard {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(NSLocalizedString(title, comment: "").uppercased()).font(Brand.mono(10, .bold)).tracking(0.7).foregroundStyle(series.first?.color ?? Brand.textSecondary)
+                    Text(NSLocalizedString(title, comment: "").uppercased()).font(Brand.mono(10, .bold)).tracking(1.0).foregroundStyle(series.first?.color ?? Brand.textSecondary)
                     Text(NSLocalizedString(subtitle, comment: "")).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
                 }
                 if allEmpty {
@@ -465,7 +465,7 @@ struct HistoryView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(NSLocalizedString("Top processes", comment: "").uppercased()).font(Brand.mono(10, .bold)).tracking(0.7).foregroundStyle(Brand.textSecondary)
+                    Text(NSLocalizedString("Top processes", comment: "").uppercased()).font(Brand.mono(10, .bold)).tracking(1.0).foregroundStyle(Brand.textSecondary)
                     Text("peak across window").font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
                     Spacer()
                     procMetricToggle
@@ -501,6 +501,7 @@ struct HistoryView: View {
                                 }
                             }
                         }
+                        .overlayScrollers()
                     }
                     .frame(height: 148)
                 }
@@ -520,15 +521,15 @@ struct HistoryView: View {
                 let on = m == procMetric
                 Button { procMetric = m } label: {
                     Text(m.rawValue).font(Brand.mono(9, on ? .bold : .regular))
-                        .foregroundStyle(on ? Color.black : Brand.textSecondary)
+                        .foregroundStyle(on ? Brand.base : Brand.textSecondary)
                         .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background { if on { Capsule().fill(.white) } }
+                        .background { if on { Capsule().fill(Brand.textPrimary) } }
                         .contentShape(Capsule())
                 }.buttonStyle(.plain)
             }
         }
         .padding(2)
-        .background(Capsule().fill(Color.black.opacity(0.22)))
+        .background(Capsule().fill(Brand.chipFill))
         .overlay(Capsule().strokeBorder(Brand.hairline, lineWidth: 1))
     }
 

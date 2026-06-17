@@ -89,14 +89,14 @@ struct RootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .padding(.leading, 88)
-                .padding(.top, 16)
+                .padding(.top, 22)
 
                 // Floating left rail — a detached, rounded rail of icon buttons
                 // in place of a top tab bar. Padded clear of the traffic lights
                 // and drawn over the content.
                 FloatingRail(selected: $pane)
                     .padding(.leading, 14)
-                    .padding(.top, 12)
+                    .padding(.top, 26)
                     .padding(.bottom, 14)
             }
         }

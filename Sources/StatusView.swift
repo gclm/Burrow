@@ -25,20 +25,20 @@ struct StatusView: View {
         self.io = live
     }
 
-    private let row1H: CGFloat = 150
-    private let row2H: CGFloat = 126
+    private let row1H: CGFloat = 162
+    private let row2H: CGFloat = 138
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 if let s = model.snap {
-                    HStack(spacing: 14) {
+                    HStack(spacing: 16) {
                         HealthCard(s: s, minHeight: row1H)
                         cpuTile(s).frame(minHeight: row1H)
                         memTile(s).frame(minHeight: row1H)
                         gpuTile(s).frame(minHeight: row1H)
                     }
-                    HStack(spacing: 14) {
+                    HStack(spacing: 16) {
                         DiskCard(s: s, liveRead: io.readMBs, liveWrite: io.writeMBs, minHeight: row2H)
                         netTile(s).frame(minHeight: row2H)
                         fanTile(s).frame(minHeight: row2H)
@@ -51,9 +51,9 @@ struct StatusView: View {
                     waiting
                 }
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 10)
-            .padding(.bottom, 26)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
         }
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -150,7 +150,7 @@ struct StatusView: View {
                 }
                 if fanCount > 0 {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(verbatim: "\(rpm)").font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textPrimary)
+                        Text(verbatim: "\(rpm)").font(Brand.mono(30, .semibold)).foregroundStyle(Brand.textPrimary)
                         Text("RPM").font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
                         if rpm == 0 {
                             Text("Idle").font(Brand.sans(11)).foregroundStyle(Brand.textTertiary).padding(.leading, 4)
@@ -159,7 +159,7 @@ struct StatusView: View {
                     MiniChart(values: model.fanHist, color: PowerAccent.fan, style: .area)
                         .frame(height: 30)
                 } else {
-                    Text("—").font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textTertiary)
+                    Text("—").font(Brand.mono(30, .semibold)).foregroundStyle(Brand.textTertiary)
                 }
                 Spacer(minLength: 2)
                 Text(fanCount > 0 ? NSLocalizedString("macOS manages speed", comment: "")
@@ -285,7 +285,7 @@ struct DiskCard: View {
                     Chip(text: s.hardware.diskSize, color: Brand.textSecondary)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(Fmt.gb(freeGB)).font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textPrimary)
+                    Text(Fmt.gb(freeGB)).font(Brand.mono(30, .semibold)).foregroundStyle(Brand.textPrimary)
                     Text("GB free").font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
                 }
                 LowSpaceBar(fraction: pct / 100)
@@ -320,7 +320,7 @@ struct BatteryCard: View {
                     HStack(alignment: .center, spacing: 16) {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                Text(String(format: "%.0f", b.percent)).font(Brand.mono(26, .semibold)).foregroundStyle(Brand.textPrimary)
+                                Text(String(format: "%.0f", b.percent)).font(Brand.mono(30, .semibold)).foregroundStyle(Brand.textPrimary)
                                 Text("%").font(Brand.mono(12)).foregroundStyle(Brand.textSecondary)
                                 Text(NSLocalizedString(b.status, comment: "")).font(Brand.sans(11)).foregroundStyle(Brand.textTertiary).padding(.leading, 4)
                             }

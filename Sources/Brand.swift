@@ -58,8 +58,8 @@ enum Brand {
 
     // MARK: Surfaces — warm-white lift (dark) / warm cards over paper (light)
     static let hairline      = Color.adaptive(0xF2ECE0, 0x2A2114, darkA: 0.10, lightA: 0.12)
-    static let cardFill      = Color.adaptive(0xF2ECE0, 0xFFFFFF, darkA: 0.05, lightA: 0.62)
-    static let cardFillHover = Color.adaptive(0xF2ECE0, 0xFFFFFF, darkA: 0.085, lightA: 0.88)
+    static let cardFill      = Color.adaptive(0xF2ECE0, 0xFFFFFF, darkA: 0.07, lightA: 0.66)
+    static let cardFillHover = Color.adaptive(0xF2ECE0, 0xFFFFFF, darkA: 0.11, lightA: 0.90)
     static let chipFill      = Color.adaptive(0xF2ECE0, 0x2A2114, darkA: 0.08, lightA: 0.07)
     static let trackFill     = Color.adaptive(0xF2ECE0, 0x2A2114, darkA: 0.10, lightA: 0.10)
 
