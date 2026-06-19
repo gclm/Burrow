@@ -843,7 +843,16 @@ final class SoftwareModel: ObservableObject {
 final class StartupModel: ObservableObject {
     enum Filter { case all, agents, daemons, problems }
 
-    @Published var items: [StartupItem] = []
+    @Published var items: [StartupItem] = [] { didSet { rebuildLoweredLabels() } }
+    /// `label` → lowercased label, folded once per `items` load so the search
+    /// field doesn't re-run ICU case-folding per item on every keystroke
+    /// (same App-Hang pattern as the app list).
+    private var loweredLabels: [String: String] = [:]
+    private func rebuildLoweredLabels() {
+        var map = [String: String](minimumCapacity: items.count)
+        for i in items { map[i.label] = i.label.lowercased() }
+        loweredLabels = map
+    }
     /// Labels currently disabled in the per-user launchd database.
     @Published var disabled: Set<String> = []
     @Published var loading = false
@@ -893,7 +902,7 @@ final class StartupModel: ObservableObject {
         }
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return base }
-        return base.filter { $0.label.lowercased().contains(q) }
+        return base.filter { (loweredLabels[$0.label] ?? $0.label.lowercased()).contains(q) }
     }
 
     var sections: [(title: String, items: [StartupItem])] {
