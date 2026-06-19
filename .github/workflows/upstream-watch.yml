@@ -1,0 +1,61 @@
+name: Upstream watch
+
+# Polls the engines Burrow depends on (mo / tw93/Mole) for new releases and
+# files a triage issue for each, plus a weekly digest of the commits between
+# releases. Burrow drives `mo` at runtime, so a new engine release is exactly
+# when Burrow may need to react (new flags, a min-version bump, output changes).
+#
+# Config: .github/upstream-watch.json   Logic: .github/scripts/upstream_watch.py
+#
+# Scheduled runs only fire from the default branch once this is merged. Before
+# then, test on the branch: gh workflow run "Upstream watch" --ref <branch> -f dry_run=true
+
+on:
+  schedule:
+    - cron: "17 8 * * *"    # daily 08:17 UTC — new engine releases
+    - cron: "23 8 * * 1"    # Mondays 08:23 UTC — weekly commit digest
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to run"
+        default: all
+        type: choice
+        options: [all, releases, digest]
+      dry_run:
+        description: "Log actions without filing issues"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve mode
+        id: m
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "23 8 * * 1" ]; then
+              echo "mode=digest" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=releases" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "mode=${{ github.event.inputs.mode }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run watcher
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          WATCH_DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: python3 .github/scripts/upstream_watch.py --mode "${{ steps.m.outputs.mode }}"

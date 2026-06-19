@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""
+Upstream release watcher for Burrow.
+
+Watches the engines Burrow depends on (currently `mo` / tw93/Mole) for new
+GitHub releases and files a triage issue for each, plus a weekly digest of the
+commits between releases. Burrow drives `mo` at runtime, so a new engine release
+can change behaviour, flags, output format, or the minimum supported version --
+this keeps those changes from slipping past.
+
+Driven by .github/upstream-watch.json. Invoked by .github/workflows/upstream-watch.yml.
+
+Dedup: a hidden marker in each issue body. We list the engine's labelled issues
+and check their bodies before filing, so the issue itself is the state -- it
+never double-files or misses.
+
+Env:
+  GH_TOKEN           token for `gh` (needs issues: write)
+  GITHUB_REPOSITORY  owner/repo to file issues into
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+CONFIG = ROOT / ".github" / "upstream-watch.json"
+REPO = os.environ.get("GITHUB_REPOSITORY", "")
+DRY_RUN = False
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def load_json(path, default):
+    try:
+        return json.loads(Path(path).read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def gh(*args, check=True):
+    r = subprocess.run(["gh", *args], capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"`gh {' '.join(args)}` failed: {r.stderr.strip()}")
+    return r.stdout
+
+
+def gh_api(path):
+    return gh("api", path, "-H", "Accept: application/vnd.github+json")
+
+
+def ensure_label(label):
+    if DRY_RUN:
+        return
+    gh("label", "create", label, "--repo", REPO, "--color", "FBCA04",
+       "--description", "New release/commits from a watched upstream engine",
+       "--force", check=False)
+
+
+def existing_bodies(label):
+    """All issue bodies (any state) carrying `label`, joined -- the dedup index."""
+    out = gh("issue", "list", "--repo", REPO, "--label", label, "--state", "all",
+             "--limit", "400", "--json", "body", check=False)
+    try:
+        return "\n".join(i.get("body") or "" for i in json.loads(out or "[]"))
+    except json.JSONDecodeError:
+        return ""
+
+
+def create_issue(title, body, label):
+    if DRY_RUN:
+        log(f"  [dry-run] would file: {title}")
+        return
+    out = gh("issue", "create", "--repo", REPO, "--title", title,
+             "--body", body, "--label", label, check=False)
+    log(f"  filed: {title} -> {out.strip()}")
+
+
+def do_releases(cfg):
+    s = cfg.get("settings", {})
+    lookback = int(s.get("release_lookback_days", 14))
+    scan = int(s.get("release_scan_count", 8))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback)
+    for eng in cfg.get("engines", []):
+        repo, name, label = eng["repo"], eng["name"], eng["label"]
+        log(f"[releases] {repo}")
+        try:
+            rels = json.loads(gh_api(f"repos/{repo}/releases?per_page={scan}"))
+        except Exception as e:
+            log(f"  ! fetch failed: {e}")
+            continue
+        ensure_label(label)
+        seen = existing_bodies(label)
+        for rel in rels:
+            if rel.get("draft"):
+                continue
+            tag = rel.get("tag_name") or ""
+            pub = rel.get("published_at") or ""
+            try:
+                if datetime.fromisoformat(pub.replace("Z", "+00:00")) < cutoff:
+                    continue
+            except ValueError:
+                pass
+            marker = f"upstream-watch:RELEASE:{repo}:{tag}"
+            if marker in seen:
+                log(f"  = {tag} already tracked")
+                continue
+            rel_name = rel.get("name") or ""
+            pre = " (prerelease)" if rel.get("prerelease") else ""
+            notes = (rel.get("body") or "").strip() or "_(no release notes)_"
+            html_url = rel.get("html_url") or f"https://github.com/{repo}/releases/tag/{tag}"
+            title = f"[{name}] {tag}"
+            if rel_name and rel_name not in (tag, ""):
+                title += f" — {rel_name}"
+            body = f"""<!-- {marker} -->
+**Upstream [`{name}`]({html_url}) released `{tag}`{pre}** on {pub[:10]}.
+
+Burrow drives `{name}` at runtime, so a new engine release can change behaviour, flags, output format, or the minimum supported version.
+
+### Triage
+- [ ] New / renamed / removed subcommand or flag Burrow wraps?
+- [ ] Bump Burrow's pinned / minimum `{name}` version?
+- [ ] Breaking change to any output the parser relies on?
+- [ ] New capability worth surfacing in the GUI or MCP tools?
+- [ ] Compat smoke-test against `{tag}`.
+
+<details><summary>Upstream release notes</summary>
+
+{notes}
+
+</details>
+
+<sub>Filed automatically by <code>.github/workflows/upstream-watch.yml</code>.</sub>
+"""
+            create_issue(title, body, label)
+
+
+def do_digest(cfg):
+    s = cfg.get("settings", {})
+    days = int(s.get("digest_lookback_days", 7))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    yr, wk, _ = datetime.now(timezone.utc).isocalendar()
+    week = f"{yr}-W{wk:02d}"
+    for eng in cfg.get("engines", []):
+        repo, name, label = eng["repo"], eng["name"], eng["label"]
+        log(f"[digest] {repo} since {since_iso}")
+        ensure_label(label)
+        marker = f"upstream-watch:DIGEST:{repo}:{week}"
+        if marker in existing_bodies(label):
+            log(f"  = digest {week} already filed")
+            continue
+        try:
+            commits = json.loads(gh_api(f"repos/{repo}/commits?since={since_iso}&per_page=100"))
+        except Exception as e:
+            log(f"  ! fetch failed: {e}")
+            continue
+        rows = []
+        for c in commits:
+            sha = c["sha"]
+            msg = (c["commit"]["message"].splitlines() or [""])[0]
+            rows.append(f"- [`{sha[:7]}`](https://github.com/{repo}/commit/{sha}) {msg}")
+        if not rows:
+            log("  = no commits in window")
+            continue
+        title = f"[{name}] weekly commit digest — {week}"
+        body = f"""<!-- {marker} -->
+**{len(rows)} commit(s)** to [`{repo}`](https://github.com/{repo}) in the last {days} days (since {since_iso[:10]}).
+
+Engine churn between tagged releases. Most won't need action — scan for anything that touches a command Burrow wraps or an output format it parses.
+
+{chr(10).join(rows)}
+
+<sub>Filed automatically by <code>.github/workflows/upstream-watch.yml</code>.</sub>
+"""
+        create_issue(title, body, label)
+
+
+def main():
+    global DRY_RUN
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", default="all", help="comma list of: releases,digest (or all)")
+    ap.add_argument("--dry-run", action="store_true", help="log actions without filing issues")
+    args = ap.parse_args()
+    DRY_RUN = args.dry_run or os.environ.get("WATCH_DRY_RUN") == "1"
+
+    modes = {m.strip() for m in args.mode.replace("all", "releases,digest").split(",") if m.strip()}
+    if not REPO:
+        log("GITHUB_REPOSITORY not set")
+        sys.exit(1)
+
+    cfg = load_json(CONFIG, {})
+    log(f"upstream-watch: modes={sorted(modes)} repo={REPO} dry_run={DRY_RUN}")
+
+    if "releases" in modes:
+        do_releases(cfg)
+    if "digest" in modes:
+        do_digest(cfg)
+    log("done")
+
+
+if __name__ == "__main__":
+    main()

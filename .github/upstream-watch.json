@@ -1,0 +1,17 @@
+{
+  "_comment": "Watch-list for .github/workflows/upstream-watch.yml. Add an engine to file a triage issue for each of its new GitHub releases (plus a weekly commit digest). See .github/scripts/upstream_watch.py.",
+
+  "engines": [
+    {
+      "repo": "tw93/Mole",
+      "name": "mo",
+      "label": "upstream:mo"
+    }
+  ],
+
+  "settings": {
+    "release_lookback_days": 14,
+    "release_scan_count": 8,
+    "digest_lookback_days": 7
+  }
+}
