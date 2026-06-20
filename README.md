@@ -68,26 +68,6 @@ and [release notes](windows/docs/release.md).
 
 ## Screenshots
 
-### Windows preview
-
-<table>
-  <tr>
-    <td><img alt="Windows preview — Status overview with health, CPU, memory, GPU, disk, network, and fan cards" src="docs/assets/shot-windows-status-overview.png"></td>
-  </tr>
-  <tr>
-    <td><img alt="Windows preview — Status battery and process table" src="docs/assets/shot-windows-status-processes.png"></td>
-  </tr>
-  <tr>
-    <td><img alt="Windows preview — History charts for CPU, memory, disk, and network" src="docs/assets/shot-windows-history.png"></td>
-  </tr>
-  <tr>
-    <td><img alt="Windows preview — Analyze treemap for disk usage" src="docs/assets/shot-windows-analyze.png"></td>
-  </tr>
-  <tr>
-    <td><img alt="Windows preview — Apps uninstall inventory sorted by size" src="docs/assets/shot-windows-apps.png"></td>
-  </tr>
-</table>
-
 ### macOS
 
 <table>
@@ -129,6 +109,27 @@ and [release notes](windows/docs/release.md).
 <p align="center">
   <img width="320" alt="Menu-bar HUD — health, metric tiles, top processes, and live job status" src="https://github.com/user-attachments/assets/105ef0ca-b970-4eec-8604-db21f458b816">
 </p>
+
+
+### Windows preview
+
+<table>
+  <tr>
+    <td><img alt="Windows preview — Status overview with health, CPU, memory, GPU, disk, network, and fan cards" src="docs/assets/shot-windows-status-overview.png"></td>
+  </tr>
+  <tr>
+    <td><img alt="Windows preview — Status battery and process table" src="docs/assets/shot-windows-status-processes.png"></td>
+  </tr>
+  <tr>
+    <td><img alt="Windows preview — History charts for CPU, memory, disk, and network" src="docs/assets/shot-windows-history.png"></td>
+  </tr>
+  <tr>
+    <td><img alt="Windows preview — Analyze treemap for disk usage" src="docs/assets/shot-windows-analyze.png"></td>
+  </tr>
+  <tr>
+    <td><img alt="Windows preview — Apps uninstall inventory sorted by size" src="docs/assets/shot-windows-apps.png"></td>
+  </tr>
+</table>
 
 ## The tools
 
