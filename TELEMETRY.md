@@ -120,9 +120,14 @@ Same ground rules, enforced the same way:
 - **Opt-out, on by default.** One switch — **Settings → Share crash reports &
   analytics** — gates both (`BurrowSettings.TelemetryEnabled`). Off → PostHog
   is hard-muted and Sentry is `Close()`d, immediately.
-- **Inert without keys.** DSN/key are injected only at release time through
-  env vars **`BURROWWIN_SENTRY_DSN`**, **`BURROWWIN_POSTHOG_API_KEY`**, and
-  optional **`BURROWWIN_POSTHOG_HOST`**. The Sentry DSN is the separate
+- **Inert without keys.** DSN/key are **baked into the assembly at build time**
+  (MSBuild `AssemblyMetadata`, see `BurrowWin.csproj`) from the
+  **`BURROWWIN_SENTRY_DSN`**, **`BURROWWIN_POSTHOG_API_KEY`**, and optional
+  **`BURROWWIN_POSTHOG_HOST`** env vars a release build sets — exactly as the
+  macOS build bakes them into Info.plist. A runtime env var is honored only as
+  a dev fallback (shipped builds carry the baked values; end users have none of
+  these set). The CI path is `.github/workflows/windows-release.yml`, which
+  injects them from repo secrets. The Sentry DSN is the separate
   `burrow-windows` project's; the PostHog key is the **same** one the macOS
   build uses (shared project). Local/dev builds set none, so telemetry never
   starts.
