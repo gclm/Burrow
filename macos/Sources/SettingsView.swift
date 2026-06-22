@@ -71,7 +71,6 @@ struct SettingsView: View {
     @State private var newPattern = ""
     @State private var removalMode: CacheRemovalMode = Store.cacheRemovalMode
     @State private var sampleIntervalSeconds: Int = Store.sampleIntervalSeconds
-    @State private var useStatusWatch: Bool = Store.useStatusWatch
     @State private var retentionDays: Int = Store.retentionDays
     @State private var autoVacuum: Bool = Store.autoVacuum
     @State private var dbSizeText: String = "—"
@@ -414,9 +413,7 @@ struct SettingsView: View {
                                     (60, "60 sec"), (120, "2 min"), (300, "5 min")]) {
                     Store.sampleIntervalSeconds = $0
                 }
-                footnote("Burrow runs `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
-                toggleRow("Stream live status (experimental)", isOn: $useStatusWatch) { Store.useStatusWatch = $0 }
-                footnote("Mole 1.44+ only: streams `mo status --watch` continuously instead of polling — lower latency and less subprocess churn. Falls back to polling on older mo or if the stream drops. Takes effect after a relaunch.")
+                footnote("With Mole 1.44+ Burrow streams `mo status --watch` for live status; on older mo it falls back to polling `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
             }
         }
     }

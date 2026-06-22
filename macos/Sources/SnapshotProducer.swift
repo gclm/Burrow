@@ -153,9 +153,10 @@ final class SnapshotProducer {
         /// Background executor for the blocking mo fetch. Production hops to
         /// a serial utility queue; tests pass `{ $0() }` for synchrony.
         var work: (@escaping () -> Void) -> Void
-        /// Optional NDJSON status stream (`mo status --watch`, V1.44+). Returns
-        /// nil when streaming is disabled / unsupported / mo unresolved → the
-        /// producer polls. Tests omit it, so the poll path is unchanged.
+        /// NDJSON status stream (`mo status --watch`, V1.44+) — the default when
+        /// the installed mo supports it. Returns nil for older mo / unresolved
+        /// mo → the producer polls (also the fallback if a live stream drops).
+        /// Tests omit it, so the poll path is exercised directly.
         var statusWatch: (() -> AsyncStream<ProcessEvent>?)? = nil
 
         static func live(db: DB) -> Deps {
@@ -167,10 +168,12 @@ final class SnapshotProducer {
                         snapshotInterval: { TimeInterval(Store.sampleIntervalSeconds) },
                         work: { queue.async(execute: $0) },
                         statusWatch: {
-                            // The gate spawns `mo --version`, so this runs off-main
-                            // (the producer calls the factory inside `work`).
-                            (Store.useStatusWatch && MoleCLI.supportsWatch())
-                                ? MoEngine.shared.statusWatch() : nil
+                            // Streaming is the default — used whenever the installed
+                            // mo supports `status --watch` (V1.44+); older mo or a
+                            // dropped stream fall back to polling. supportsWatch()
+                            // spawns `mo --version`, so this runs off-main (the
+                            // producer calls the factory inside `work`).
+                            MoleCLI.supportsWatch() ? MoEngine.shared.statusWatch() : nil
                         })
         }
     }
