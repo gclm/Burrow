@@ -1,48 +1,34 @@
-# Burrow 0.8.0
+# Burrow 0.8.1
 
-A top-to-bottom visual redesign, a wave of new tools, a deeper agent surface,
-and an early Windows preview. Still local-first — no new always-on network.
+A stability release: the live dashboard no longer freezes, live status now
+streams, and there's a one-click Homebrew update button — plus the Windows
+preview catches up on its code review. Still local-first.
 
-## Redesigned
-- A warm, tactile new look — a warm-coffee adaptive palette, film grain over a
-  soft gradient, a **floating icon rail** (replacing the top tabs), borderless
-  cards, and the Geist / Cal Sans type system.
-- **Overview** — Health pulled into an open hero band over a cleaner 3-up
-  vitals grid.
-- **History** — a focal hero chart with a selectable metric strip (tap to swap),
-  plus drag-select on a chart to surface the top processes for that spike.
-- **Menu-bar HUD** — borderless tiles on the same warm ground. Doctor and
-  Restore reskinned to match; edge-fade scrollers throughout.
+## Fixed
+- **No more "App Hanging" freezes.** The Overview dashboard used to re-render
+  its whole grid — every chart tile and the full process table — once a second;
+  now only the small Disk / Network tiles update that often, the rest on the
+  snapshot. Opening **Settings** and the **About** panel no longer blocks the
+  main thread either (login-item status, metrics-folder sizing, and the
+  engine-version lookup all moved off it), and **PostHog telemetry now flushes
+  off the main thread**.
 
-## New & improved tools
-- **Ports** — live connections, bandwidth, reverse-DNS peers, service labels,
-  conflicts, sortable columns, and a detail view.
-- **Get Online / Connectivity** — MDM + gateway checks, active-interface IP,
-  captive-portal and device-side rescue, one-click fixes.
-- **Tune-Up** — a Smart-Care flow (scan → results → run) that auto-scans on entry.
-- **Homebrew** — Services (start / stop / restart), Brewfile snapshots
-  (export / restore), and live `brew upgrade` progress in Updates.
-- **Menu bar** — customizable popup, Stats-depth widgets, a RunCat-style runner,
-  and live metric widgets in the status item.
-- **Disk** gains a "Full in ~N" forecast; **Doctor** gains SMART-health and
-  backup-awareness checks, with backup-overdue / SMART-failing reminders;
-  multi-select bulk reclaim; a git purge-safety badge.
+## Changed
+- **Live status streams by default.** With Mole 1.44+, Burrow streams
+  `mo status --watch` (newline-delimited JSON) instead of polling `mo status
+  --json` — lower latency and less subprocess churn. It falls back to polling
+  on older `mo` or if the stream drops, so the dashboard never stalls.
 
-## For your AI agent
-- A deeper MCP surface: a token-gated `/events` **SSE stream** and `burrow_diff`
-  (e.g. login-item churn), so an agent can watch and compare your machine over
-  time.
+## Added
+- **Update with Homebrew** — for cask installs, the update prompt now has a
+  one-click button that runs `brew upgrade --cask burrow` and relaunches,
+  instead of just printing the command.
 
-## Windows preview (new)
-- An early native **WinUI 3 / .NET 8** app now lives under `windows/` — Status,
-  History, Analyze, Apps, a tray HUD, local telemetry/history, and an MCP stdio
-  bridge. Build from source; unsigned preview.
-
-## Performance & stability
-- Killed several main-thread app-hangs (process table, sort, ICU on the render
-  path, app icons, clean reports, the software list). Onboarding now
-  auto-detects `mo`.
-
-## Under the hood
-- The repo is now a monorepo (`macos/` + `windows/`), with inside-out framework
-  signing for notarization and an automated upstream `mo` release watcher.
+## Windows preview
+- Closed out the port review: **MCP tool parity with macOS**
+  (`burrow_list_apps`, `burrow_purge`, `burrow_installer` — all preview-only
+  over MCP), stdio MCP that survives the HTTP toggle, **brand assets / palette /
+  fonts / app icon aligned to the Mac**, honest docs, and real MCP +
+  deletion-guard test coverage. (Earlier review rounds added Recycle-Bin
+  routing, a drive-root guard, and SHA-256 verification of the bundled engine
+  binary.) Still an unsigned, build-from-source preview.
