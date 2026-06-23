@@ -123,13 +123,36 @@
 <header class="hero page">
   <h1>Changelog</h1>
   <p>Every version at a glance — what it added, changed, and fixed. Full notes for each live on GitHub.</p>
-  <p class="count">12 releases · latest 0.8.1 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
+  <p class="count">13 releases · latest 0.8.2 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
 </header>
 
 <main class="page">
+    <article class="entry" id="v0.8.2">
+      <div class="ver-col">
+        <h2 class="ver">0.8.2<span class="latest">latest</span></h2>
+        <span class="date mono">Jun 23, 2026</span>
+        <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.8.2" target="_blank" rel="noopener">full notes ↗</a>
+      </div>
+      <div class="sbody">
+        <p class="lead">A fix release — a Full Disk Access grant now actually takes effect, and Burrow asks for notification permission up front.</p>
+        <div class="sblock">
+          <div class="slabel mono">fixed</div>
+          <ul class="slist">
+            <li><b>Full Disk Access is honored again.</b> The shipped app's embedded framework signatures were malformed (<code>codesign --verify --strict</code> failed on <code>Sentry.framework</code>), so macOS couldn't validate Burrow's identity and silently ignored a Full Disk Access grant — turning it on in System Settings appeared to do nothing. The release now re-signs the app and every nested framework inside-out so the signature is valid and the grant takes effect. After updating, toggle Full Disk Access off and back on once. _(Burrow is still ad-hoc-signed, so a re-grant is needed after each update until it ships with a Developer ID signature.)_</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">changed</div>
+          <ul class="slist">
+            <li><b>Notification permission is requested up front</b> — Burrow now asks once, when you finish onboarding or first enable a notifying feature, instead of springing the system prompt the moment a notification tries to fire.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
     <article class="entry" id="v0.8.1">
       <div class="ver-col">
-        <h2 class="ver">0.8.1<span class="latest">latest</span></h2>
+        <h2 class="ver">0.8.1</h2>
         <span class="date mono">Jun 23, 2026</span>
         <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.8.1" target="_blank" rel="noopener">full notes ↗</a>
       </div>

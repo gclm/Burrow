@@ -323,7 +323,7 @@
 
   <!-- ===== HERO ===== -->
   <header class="hero">
-    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.8.1</span>
+    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.8.2</span>
     <h1>Burrow
       <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M14 74 a36 36 0 0 1 72 0 Z" fill="#F3ECDD"/><rect x="38" y="74" width="24" height="7" rx="3.5" fill="#121217"/></svg>
     </h1>
@@ -389,35 +389,26 @@
     <div class="sec-head wn-head">
       <div>
         <span class="sec-num">What's new · June 2026</span>
-        <h2 class="sec-title">New in 0.8.1</h2>
+        <h2 class="sec-title">New in 0.8.2</h2>
       </div>
       <a class="btn btn-out btn-sm" href="releases.html">All releases</a>
     </div>
 
     <div class="grid3 wn-grid">
       <article class="tcard" style="--c: var(--teal)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1114 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg></div><div class="nm">No more freezes</div></div>
-        <p class="ds">The live dashboard re-rendered its whole grid every second; now only the small Disk/Network tiles do. The App-Hang freezes are gone, and Settings/About open instantly.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg></div><div class="nm">Full Disk Access fixed</div></div>
+        <p class="ds">The app's nested framework signatures were malformed, so macOS couldn't validate Burrow and silently ignored a Full Disk Access grant. The release now re-signs everything inside-out so the grant takes effect.</p>
       </article>
       <article class="tcard" style="--c: var(--azure)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div><div class="nm">Streaming live status</div></div>
-        <p class="ds">With Mole 1.44+, status streams over <code>mo status --watch</code> (NDJSON) by default instead of polling — lower latency, less churn. Falls back to polling automatically.</p>
-      </article>
-      <article class="tcard" style="--c: var(--coral)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><div class="nm">Update with Homebrew</div></div>
-        <p class="ds">Cask installs get a one-click button in the update prompt that runs <code>brew upgrade</code> and relaunches.</p>
-      </article>
-      <article class="tcard" style="--c: var(--gold)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 8h18M9 21h6"/></svg></div><div class="nm">Windows preview review</div></div>
-        <p class="ds">Closed out the port review — MCP parity with the Mac, brand assets aligned, honest docs, and deletion-safety + test coverage.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3l1 1-2 2M16 8l2 2"/></svg></div><div class="nm">Permission up front</div></div>
+        <p class="ds">Burrow asks for notification permission once — at onboarding or when you first enable a notifying feature — instead of springing the prompt mid-notification.</p>
       </article>
     </div>
 
-    <div class="extra-label mono">// also tightened in 0.8.1</div>
+    <div class="extra-label mono">// also tightened in 0.8.2</div>
     <div class="wn-chips">
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>PostHog telemetry now flushes off the main thread</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Login-item status, metrics-folder sizing, and the engine-version lookup moved off the main thread</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Windows: Recycle-Bin routing, drive-root guard, and SHA-256 verification of the bundled engine</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>After updating, toggle Full Disk Access off and back on once</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Still ad-hoc-signed — a re-grant is needed after each update until Burrow ships with a Developer ID signature</span>
     </div>
     <!-- WN:END -->
   </section>

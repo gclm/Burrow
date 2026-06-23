@@ -2,6 +2,44 @@
   "_comment": "Source of truth for the site's release history. Newest first. Edit this, then run `python3 scripts/site-release.py` to regenerate the homepage 'New in X' section and releases.html. Icons/colors: run `python3 scripts/site-release.py --list-icons`.",
   "releases": [
     {
+      "version": "0.8.2",
+      "date": "2026-06-23",
+      "tag": "v0.8.2",
+      "tagline": "A fix release — a Full Disk Access grant now actually takes effect, and Burrow asks for notification permission up front.",
+      "highlights": [
+        {
+          "icon": "shield",
+          "color": "teal",
+          "title": "Full Disk Access fixed",
+          "line": "The app's nested framework signatures were malformed, so macOS couldn't validate Burrow and silently ignored a Full Disk Access grant. The release now re-signs everything inside-out so the grant takes effect."
+        },
+        {
+          "icon": "key",
+          "color": "azure",
+          "title": "Permission up front",
+          "line": "Burrow asks for notification permission once — at onboarding or when you first enable a notifying feature — instead of springing the prompt mid-notification."
+        }
+      ],
+      "chips": [
+        "After updating, toggle Full Disk Access off and back on once",
+        "Still ad-hoc-signed — a re-grant is needed after each update until Burrow ships with a Developer ID signature"
+      ],
+      "sections": [
+        {
+          "label": "fixed",
+          "items": [
+            "**Full Disk Access is honored again.** The shipped app's embedded framework signatures were malformed (`codesign --verify --strict` failed on `Sentry.framework`), so macOS couldn't validate Burrow's identity and silently ignored a Full Disk Access grant — turning it on in System Settings appeared to do nothing. The release now re-signs the app and every nested framework inside-out so the signature is valid and the grant takes effect. After updating, toggle Full Disk Access off and back on once. _(Burrow is still ad-hoc-signed, so a re-grant is needed after each update until it ships with a Developer ID signature.)_"
+          ]
+        },
+        {
+          "label": "changed",
+          "items": [
+            "**Notification permission is requested up front** — Burrow now asks once, when you finish onboarding or first enable a notifying feature, instead of springing the system prompt the moment a notification tries to fire."
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.8.1",
       "date": "2026-06-23",
       "tag": "v0.8.1",
