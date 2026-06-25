@@ -928,19 +928,47 @@ struct SettingsView: View {
         .padding(.vertical, 4)
     }
 
-    /// Live preview of the configured row, rendered with representative values
-    /// so the layout is visible while editing (not live data).
+    /// Live preview of the configured row, rendered with the real sampler values
+    /// (refreshed ~1 s) so it matches what's actually in the menu bar.
     private var menuBarPreview: some View {
-        HStack {
-            Spacer()
-            if let img = MenuBarRenderer.image(items: menuBarItems, values: Self.menuBarPreviewValues) {
-                Image(nsImage: img)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Brand.cardFill))
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack {
+                Spacer()
+                if let img = MenuBarRenderer.image(items: menuBarItems, values: liveMenuBarValues) {
+                    Image(nsImage: img)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Brand.cardFill))
+                }
+                Spacer()
             }
-            Spacer()
         }
         .padding(.bottom, 4)
+    }
+
+    /// The real values the menu-bar row would draw, from the running sampler;
+    /// falls back to representative numbers before the first sample.
+    private var liveMenuBarValues: MenuBarMetricValues {
+        guard let live = AppDelegate.shared?.producer?.live else { return Self.menuBarPreviewValues }
+        var v = MenuBarMetricValues()
+        if let s = live.lastSnapshot {
+            v.primary[.cpu] = s.cpu.usage
+            v.primary[.memory] = s.memory.usedPercent
+            if let g = s.gpu?.first, g.usage >= 0 { v.primary[.gpu] = g.usage }
+            if let d = s.disks.first { v.primary[.diskUsage] = d.usedPercent }
+            if let t = s.thermal {
+                if t.fanSpeed > 0 || (t.fanCount ?? 0) > 0 { v.primary[.fan] = Double(t.fanSpeed) }
+                if let temp = t.bestTemp { v.primary[.temperature] = temp }
+                if t.systemPower > 0 { v.primary[.power] = t.systemPower }
+            }
+            if let b = s.batteries?.first {
+                v.primary[.battery] = b.percent
+                v.batteryCharging = b.status.lowercased().contains("charg")
+            }
+        }
+        v.primary[.network] = live.rxMBs; v.secondary[.network] = live.txMBs
+        v.primary[.diskIO]  = live.readMBs; v.secondary[.diskIO]  = live.writeMBs
+        v.memoryPressureLevel = MemoryPressure.level()
+        return v
     }
 
     /// Representative values for the Settings preview only.
@@ -959,12 +987,14 @@ struct SettingsView: View {
     private struct MenuBarPreset { let name: String; let items: [MenuBarItem] }
     private static let menuBarPresets: [MenuBarPreset] = [
         .init(name: NSLocalizedString("CPU · RAM", comment: ""),
-              items: [MenuBarItem(metric: .cpu, style: .value), MenuBarItem(metric: .memory, style: .value)]),
+              items: [MenuBarItem(metric: .cpu, style: .value),
+                      MenuBarItem(metric: .memory, style: .value, color: .pressure)]),
         .init(name: NSLocalizedString("CPU · RAM · Net · Disk", comment: ""),
-              items: [MenuBarItem(metric: .cpu, style: .value), MenuBarItem(metric: .memory, style: .value),
+              items: [MenuBarItem(metric: .cpu, style: .value),
+                      MenuBarItem(metric: .memory, style: .value, color: .pressure),
                       MenuBarItem(metric: .network, style: .speed), MenuBarItem(metric: .diskUsage, style: .bar)]),
         .init(name: NSLocalizedString("Everything", comment: ""),
-              items: MenuBarMetric.allCases.map { MenuBarItem(metric: $0, style: $0.styles.first ?? .value) }),
+              items: MenuBarMetric.allCases.map { MenuBarItem(metric: $0, style: $0.styles.first ?? .value, color: $0.defaultColor) }),
     ]
 
     private func applyMenuBarPreset(_ items: [MenuBarItem]) {
@@ -1072,7 +1102,7 @@ struct SettingsView: View {
     }
 
     private func addMenuBarMetric(_ m: MenuBarMetric) {
-        menuBarItems.append(MenuBarItem(metric: m, style: m.styles.first ?? .value))
+        menuBarItems.append(MenuBarItem(metric: m, style: m.styles.first ?? .value, color: m.defaultColor))
         commitMenuBarItems()
     }
 

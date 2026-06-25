@@ -99,6 +99,11 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
                         : MenuBarColorMode.allCases.filter { $0 != .pressure }
     }
 
+    /// Default colour mode for a fresh widget of this metric. Memory defaults to
+    /// "By pressure" (raw % is misleading on macOS — it counts cache); the rest
+    /// use the value-driven utilization ramp.
+    var defaultColor: MenuBarColorMode { self == .memory ? .pressure : .utilization }
+
     /// Two-channel metrics (down/up, read/write) — eligible for the speed style.
     var isDual: Bool { self == .network || self == .diskIO }
 
@@ -264,7 +269,7 @@ struct MenuBarItem: Codable, Equatable, Identifiable {
     /// user switches the menu bar to `.metrics` (default is the icon).
     static let defaults: [MenuBarItem] = [
         MenuBarItem(metric: .cpu, style: .value),
-        MenuBarItem(metric: .memory, style: .value),
+        MenuBarItem(metric: .memory, style: .value, color: .pressure),
     ]
 }
 
