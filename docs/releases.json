@@ -2,6 +2,83 @@
   "_comment": "Source of truth for the site's release history. Newest first. Edit this, then run `python3 scripts/site-release.py` to regenerate the homepage 'New in X' section and releases.html. Icons/colors: run `python3 scripts/site-release.py --list-icons`.",
   "releases": [
     {
+      "version": "0.8.3",
+      "date": "2026-06-25",
+      "tag": "v0.8.3",
+      "tagline": "A metrics & menu-bar release — real memory-pressure reporting, a power-draw widget, a live menu-bar preview, and a snappier popover.",
+      "highlights": [
+        {
+          "icon": "gauge",
+          "color": "teal",
+          "title": "Real memory pressure",
+          "line": "“By pressure” now reads actual macOS memory pressure — wired plus compressed over total, the same figure Activity Monitor shows — as a live percentage, colored by real load instead of a CPU-style ramp."
+        },
+        {
+          "icon": "chart",
+          "color": "azure",
+          "title": "Power-draw widget",
+          "line": "Live system wattage (W) as a menu-bar metric and a dashboard tile."
+        },
+        {
+          "icon": "layout",
+          "color": "coral",
+          "title": "Live menu-bar preview",
+          "line": "Settings previews your real metrics as you configure them, with one-tap layout presets."
+        },
+        {
+          "icon": "sparkle",
+          "color": "gold",
+          "title": "New runner animations",
+          "line": "Wave and Bars join the built-in menu-bar runners."
+        },
+        {
+          "icon": "pulse",
+          "color": "lilac",
+          "title": "Snappier popover",
+          "line": "The metric grid no longer re-renders on unrelated changes, and CPU, memory, and GPU sparklines tick live every second."
+        }
+      ],
+      "chips": [
+        "Memory detail card: used / free / cached / swap",
+        "App-Hang reports from memory-starved Macs are dropped before sending",
+        "Brewfile import/export pickers no longer trip the hang detector",
+        "Temperature color ramp corrected"
+      ],
+      "sections": [
+        {
+          "label": "added",
+          "items": [
+            "**Power-draw widget** — live system wattage (W) as a menu-bar metric and a dashboard tile.",
+            "**Real memory pressure.** “By pressure” now reads actual macOS memory pressure — `(wired + compressed) / total` via `host_statistics64`, the same figure Activity Monitor reports — instead of reusing the CPU-style utilization ramp. Shown as a percentage on the memory tiles, colored green ≤59% / orange 60–79% / red ≥80%.",
+            "**Memory detail card** — the Status dashboard breaks memory down into used / free / cached / swap.",
+            "**Live menu-bar preview + layout presets** — Settings previews your real metrics as you configure them, with one-tap layout presets.",
+            "**Two new runner animations** — Wave and Bars."
+          ]
+        },
+        {
+          "label": "changed",
+          "items": [
+            "**Consistent pressure coloring** across the dashboard tile, popover, memory-detail card, and menu bar.",
+            "**Live popover sparklines** — CPU / memory / GPU tick every second (about a minute of history).",
+            "**Honest color picker** — “By pressure” is offered only where it applies (memory); the temperature color ramp was corrected."
+          ]
+        },
+        {
+          "label": "fixed",
+          "items": [
+            "**Brewfile import/export pickers no longer trip the hang detector** (ANR false-positives).",
+            "**App-Hang reports from memory-starved machines are dropped** before sending — they were environmental, not Burrow bugs."
+          ]
+        },
+        {
+          "label": "performance",
+          "items": [
+            "**Snappier popover** — the metric grid no longer re-renders on unrelated state changes."
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.8.2",
       "date": "2026-06-23",
       "tag": "v0.8.2",
