@@ -31,7 +31,7 @@ import Darwin   // sysctlbyname — native memory-pressure level
 
 /// A metric that can be surfaced in the menu bar.
 enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
-    case cpu, memory, gpu, diskUsage, network, diskIO, fan, temperature, battery
+    case cpu, memory, gpu, diskUsage, network, diskIO, fan, temperature, battery, power
 
     var id: String { rawValue }
 
@@ -47,6 +47,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return "FAN"
         case .temperature: return "TEMP"
         case .battery:     return "BAT"
+        case .power:       return "PWR"
         }
     }
 
@@ -62,6 +63,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return NSLocalizedString("Fan speed", comment: "")
         case .temperature: return NSLocalizedString("Temperature", comment: "")
         case .battery:     return NSLocalizedString("Battery", comment: "")
+        case .power:       return NSLocalizedString("Power draw", comment: "")
         }
     }
 
@@ -77,6 +79,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return "fanblades"
         case .temperature: return "thermometer.medium"
         case .battery:     return "battery.100"
+        case .power:       return "bolt.fill"
         }
     }
 
@@ -84,7 +87,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
     var isPercentage: Bool {
         switch self {
         case .cpu, .memory, .gpu, .diskUsage, .battery: return true
-        case .network, .diskIO, .fan, .temperature:     return false
+        case .network, .diskIO, .fan, .temperature, .power: return false
         }
     }
 
@@ -107,6 +110,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .network, .diskIO:       return [.value, .labeled, .speed, .sparkline]
         case .fan, .temperature:      return [.value, .labeled]
         case .battery:                return [.value, .labeled, .bar, .battery]
+        case .power:                  return [.value, .labeled, .sparkline]
         }
     }
 
@@ -428,6 +432,8 @@ enum MenuBarRenderer {
             return v > 0 ? "\(Int(v.rounded()))" : "—"
         case .temperature:
             return "\(Int(v.rounded()))°"
+        case .power:
+            return "\(Int(v.rounded()))W"
         case .network, .diskIO:
             return rate(v + (values.secondary[m] ?? 0))
         }
