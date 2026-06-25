@@ -697,7 +697,9 @@ final class HUDModel: ObservableObject {
 
     private func appendHist(_ ring: inout [Double], _ value: Double) {
         ring.append(value)
-        if ring.count > 120 { ring.removeFirst(ring.count - 120) }
+        // ~1 min of 1 s samples — enough recent trend to read at a glance
+        // without cramming the small popover chart.
+        if ring.count > 60 { ring.removeFirst(ring.count - 60) }
     }
 
     /// Clean Watch lifetime totals, off the daily `history.cleanwatch`
