@@ -112,7 +112,7 @@ struct StatusView: View {
         let used = Fmt.gib(m.used)
         let total = Fmt.gib(m.total)
         return ValueTile(
-            eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
+            eyebrow: "Memory", glyph: "memorychip", accent: MemoryPressure.tint(m.pressure),
             value: String(format: "%.0f", m.usedPercent), unit: "%",
             chip: (label, color), values: model.memHist, chartStyle: .area,
             footnote: String(format: NSLocalizedString("%.1f / %.1f GB · swap %.1f GB", comment: ""),

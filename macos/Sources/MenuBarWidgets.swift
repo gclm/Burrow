@@ -305,6 +305,17 @@ enum MemoryPressure {
               value > 0 else { return normal }
         return Int(value)
     }
+
+    /// Brand tint for mo's pressure STRING (normal/warning/critical) — the same
+    /// signal as the menu-bar "By pressure" mode, so the Status + popover memory
+    /// tiles read by actual pressure (calm even at high usedPercent) instead of
+    /// a fixed colour. normal → green, warning → orange, critical → red.
+    static func tint(_ pressureString: String) -> Color {
+        let p = pressureString.lowercased()
+        if p.contains("crit") { return Brand.red }
+        if p.contains("warn") { return Brand.orange }
+        return Brand.green
+    }
 }
 
 // MARK: - Renderer

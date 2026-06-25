@@ -260,7 +260,7 @@ struct PopupView: View {
                           footnote: (s.gpu?.first?.name ?? "GPU").replacingOccurrences(of: "Apple ", with: ""))
             }
             if tiles.contains(.memory) {
-                ValueTile(variant: .hud, eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
+                ValueTile(variant: .hud, eyebrow: "Memory", glyph: "memorychip", accent: MemoryPressure.tint(s.memory.pressure),
                           value: String(format: "%.0f", s.memory.usedPercent), unit: "%",
                           chip: memChip(s),
                           values: model.memHist, chartStyle: .area,
