@@ -5,8 +5,7 @@ widget, pressure-aware coloring everywhere, a live menu-bar preview, two new
 runner animations, and a snappier popover. Still local-first.
 
 ## Added
-- **Power-draw widget.** Live system wattage (W) as a menu-bar metric and
-  dashboard tile.
+- **Power-draw widget.** Live system wattage (W) as a menu-bar metric.
 - **Real memory pressure.** "By pressure" now reads actual macOS memory pressure
   — `(wired + compressed) / total` via `host_statistics64`, the same figure
   Activity Monitor reports — instead of reusing the CPU-style utilization ramp.
@@ -35,6 +34,10 @@ runner animations, and a snappier popover. Still local-first.
 ## Performance
 - **Snappier popover** — the metric grid no longer re-renders on unrelated state
   changes.
+
+## Windows
+- **Windows preview** — a version-aligned 0.8.3 build is attached
+  (`BurrowWin-0.8.3-win-x64.zip`). No Windows-specific changes this release.
 
 # Burrow 0.8.2
 
