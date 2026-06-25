@@ -293,29 +293,35 @@ struct MenuBarMetricValues {
     func has(_ m: MenuBarMetric) -> Bool { primary[m] != nil }
 }
 
-/// Memory pressure, expressed as a percentage and colour. macOS's own pressure
-/// signal (`kern.memorystatus_vm_pressure_level`) is a jumpy 3-level enum with
-/// no number, and mo's snapshot string is empty on Apple Silicon — so we report
-/// the VM compressor's share of RAM, which is stable and rises under pressure.
+/// Memory pressure as a percentage + colour, matching Activity Monitor / iStat
+/// Menus: the share of physical RAM that is "hard" — wired (unpageable) plus
+/// compressed — over total. The kernel's own `kern.memorystatus_vm_pressure_level`
+/// is only a jumpy 3-level enum with no number, and mo's snapshot pressure string
+/// is empty on Apple Silicon, so neither gives an accurate figure on its own.
 enum MemoryPressure {
-    /// Memory pressure as a percentage — the share of physical RAM the VM
-    /// compressor is holding, which rises as macOS compresses pages under
-    /// pressure. (mo's snapshot pressure string is empty on Apple Silicon, and
-    /// `kern.memorystatus_vm_pressure_level` is jumpy with no number, so this is
-    /// the stable signal shown everywhere.)
+    /// `(wired + compressed) / total` via `host_statistics64` — the same number
+    /// iStat Menus reports as "Pressure" (e.g. ~53%).
     static func percent() -> Int {
-        var compressed: UInt64 = 0; var cSize = MemoryLayout<UInt64>.size
+        var size = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
+        var stats = vm_statistics64_data_t()
+        let kr = withUnsafeMutablePointer(to: &stats) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &size)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        let hard = (Double(stats.wire_count) + Double(stats.compressor_page_count)) * Double(vm_page_size)
         var total: UInt64 = 0; var tSize = MemoryLayout<UInt64>.size
-        guard sysctlbyname("vm.compressor_bytes_used", &compressed, &cSize, nil, 0) == 0,
-              sysctlbyname("hw.memsize", &total, &tSize, nil, 0) == 0, total > 0 else { return 0 }
-        return min(100, Int((Double(compressed) / Double(total) * 100).rounded()))
+        guard sysctlbyname("hw.memsize", &total, &tSize, nil, 0) == 0, total > 0 else { return 0 }
+        return min(100, max(0, Int((hard / Double(total) * 100).rounded())))
     }
 
-    /// green ≤ 39 · orange 40–69 · red ≥ 70.
+    /// Tuned so normal operation (wired + light compression, ~40–55%) stays
+    /// green: green ≤ 59 · orange 60–79 · red ≥ 80.
     static func tint(percent: Int) -> Color {
         switch percent {
-        case 70...: return Brand.red
-        case 40...: return Brand.orange
+        case 80...: return Brand.red
+        case 60...: return Brand.orange
         default:    return Brand.green
         }
     }
