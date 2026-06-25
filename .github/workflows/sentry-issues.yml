@@ -133,6 +133,23 @@ jobs:
                 continue
               fi
 
+              # Skip App-Hang (ANR) issues. One 2 s main-thread stall fans out
+              # into many Sentry issues — the hang sampler's top frame differs
+              # each time (swift_release, StackLayout.explicitAlignment, langid_…),
+              # all the same underlying event — so filing one GitHub issue per
+              # short-id floods the tracker for a single hang. They're also low
+              # signal here: the memory-starved majority (Burrow runs on RAM-
+              # pressured Macs) is already dropped client-side in
+              # CrashReporter.isMemoryStarvedAppHang, and a genuine hang is better
+              # triaged in Sentry, where its fan-out is grouped. Match on
+              # issueType/title so it's robust to exact wording.
+              issueType=$(jq -r '.issueType // empty' <<<"$issue")
+              titleProbe=$(jq -r '.title // .metadata.value // empty' <<<"$issue")
+              if printf '%s %s' "$issueType" "$titleProbe" | grep -qiE 'app[ _-]?hang|hanging'; then
+                echo "Skipping App-Hang issue ${shortId} (ANR fan-out — not auto-filed)."
+                continue
+              fi
+
               if [ "$filed" -ge "$MAX_PER_RUN" ]; then
                 echo "::warning::Hit MAX_PER_RUN=${MAX_PER_RUN}; remaining new issues will be filed next run."
                 break 2
