@@ -697,7 +697,7 @@ struct SettingsView: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "Brewfile"
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard CrashReporter.withoutAppHangTracking({ panel.runModal() }) == .OK, let url = panel.url else { return }
         brewBusy = true
         brewSnapshotStatus = NSLocalizedString("Exporting…", comment: "")
         Task {
@@ -719,7 +719,7 @@ struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard CrashReporter.withoutAppHangTracking({ panel.runModal() }) == .OK, let url = panel.url else { return }
         brewBusy = true
         brewSnapshotStatus = NSLocalizedString("Restoring — installing from your Brewfile can take a while…", comment: "")
         Task {
@@ -960,7 +960,7 @@ struct SettingsView: View {
                 }
             }
             optionPicker("Color", value: item.color.title) {
-                ForEach(MenuBarColorMode.allCases) { c in
+                ForEach(item.metric.colorModes) { c in
                     Button(c.title) { updateMenuBarItem(idx) { $0.color = c } }
                 }
             }

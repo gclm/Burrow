@@ -198,6 +198,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         v.histories[.cpu]    = menuBarHistory[.cpu]
         v.histories[.memory] = menuBarHistory[.memory]
         v.histories[.gpu]    = menuBarHistory[.gpu]
+        // Real memory-pressure level for the "By pressure" colour mode — a
+        // cheap native sysctl read here on the value-build pass, not the draw
+        // path (see MemoryPressure in MenuBarWidgets).
+        v.memoryPressureLevel = MemoryPressure.level()
         return v
     }
 
