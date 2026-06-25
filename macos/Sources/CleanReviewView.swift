@@ -45,7 +45,8 @@ struct CleanReviewView: View {
             Rectangle().fill(Brand.hairline).frame(height: 1)
             ScrollView {
                 LazyVStack(spacing: 10) {
-                    ForEach(list.categories) { category in
+                    // Safest / most-regenerable categories first (PRD §Clean).
+                    ForEach(CleanImpactRanker.sorted(list.categories.map { (category: $0.name, value: $0) })) { category in
                         categoryCard(category)
                     }
                 }
@@ -215,6 +216,13 @@ struct CleanReviewView: View {
                     .lineLimit(1).truncationMode(.middle)
             }
             Spacer()
+            if SensitiveRemnantMatcher.isSensitive(item.path) {
+                Text(NSLocalizedString("sensitive", comment: ""))
+                    .font(Brand.mono(9, .medium)).foregroundStyle(Brand.amber)
+                    .padding(.horizontal, 5).padding(.vertical, 1.5)
+                    .background(Capsule().fill(Brand.amber.opacity(0.16)))
+                    .help(NSLocalizedString("Looks like a credential/keychain path — review before removing.", comment: ""))
+            }
             badge(for: lockReason)
             if let count = item.itemCount {
                 Text(String(format: NSLocalizedString("%d items", comment: ""), count))
