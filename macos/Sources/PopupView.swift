@@ -673,6 +673,14 @@ final class HUDModel: ObservableObject {
     func subscribeSnapshot() async {
         for await v in feeds.liveSnapshot(live).subscribeValues() {
             snap = v.snap
+            // Live 1 s sparklines for the cpu/mem/gpu tiles — appended each tick
+            // so the popover charts actually move (the 15 s pump now only feeds
+            // net/fan + top-drain). Capped to the largest history window.
+            if let s = v.snap {
+                appendHist(&cpuHist, s.cpu.usage)
+                appendHist(&memHist, s.memory.usedPercent)
+                if let g = s.gpu?.first, g.usage >= 0 { appendHist(&gpuHist, g.usage) }
+            }
             if let when = v.sampledAt {
                 freshness = String(format: NSLocalizedString("%ds ago", comment: ""), Int(Date().timeIntervalSince(when)))
             } else {
@@ -684,9 +692,14 @@ final class HUDModel: ObservableObject {
     /// Sparklines + top drain, off the 15 s `metrics.sparklines.30m` pump.
     func subscribeSparklines() async {
         for await v in feeds.metricSparklines(db: db).subscribeValues() {
-            cpuHist = v.cpu; memHist = v.mem; netHist = v.net; gpuHist = v.gpu; fanHist = v.fan
+            netHist = v.net; fanHist = v.fan
             topDrain = v.topDrain
         }
+    }
+
+    private func appendHist(_ ring: inout [Double], _ value: Double) {
+        ring.append(value)
+        if ring.count > 120 { ring.removeFirst(ring.count - 120) }
     }
 
     /// Clean Watch lifetime totals, off the daily `history.cleanwatch`

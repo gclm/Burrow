@@ -967,7 +967,7 @@ struct SettingsView: View {
         }
         v.primary[.network] = live.rxMBs; v.secondary[.network] = live.txMBs
         v.primary[.diskIO]  = live.readMBs; v.secondary[.diskIO]  = live.writeMBs
-        v.memoryPressureLevel = MemoryPressure.level()
+        v.memoryPressureLevel = MemoryPressure.levelForString(live.lastSnapshot?.memory.pressure ?? "")
         return v
     }
 

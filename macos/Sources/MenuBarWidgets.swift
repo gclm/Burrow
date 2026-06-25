@@ -321,6 +321,17 @@ enum MemoryPressure {
         if p.contains("warn") { return Brand.orange }
         return Brand.green
     }
+
+    /// Map the engine's pressure STRING to a level int (for the menu-bar "By
+    /// pressure" colour), so the menu bar agrees with the dashboard/popover
+    /// tiles. Empty string ⇒ fall back to the native sysctl.
+    static func levelForString(_ s: String) -> Int {
+        let p = s.lowercased()
+        if p.contains("crit") { return critical }
+        if p.contains("warn") { return warning }
+        if p.isEmpty { return level() }
+        return normal
+    }
 }
 
 // MARK: - Renderer
