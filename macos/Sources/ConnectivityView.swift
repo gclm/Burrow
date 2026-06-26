@@ -36,6 +36,8 @@ struct ConnectivityView: View {
     /// transfers data to/from Cloudflare's public speed endpoint.
     @State private var speed: SpeedTest.Result?
     @State private var speedTesting = false
+    /// Persisted log of recent attempts (PRD §β).
+    @State private var history: [ConnectionHistory.Entry] = []
 
     private var accent: Color { Tool.status.accent }
 
@@ -52,12 +54,16 @@ struct ConnectivityView: View {
                 }
                 speedCard
                 nearbyCard
+                historyCard
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
-        .onAppear { if isActive, !loaded { reload() } }
+        .onAppear {
+            if history.isEmpty { history = ConnectionHistory.load() }
+            if isActive, !loaded { reload() }
+        }
         .onChange(of: isActive) { _, now in if now, !loaded { reload() } }
     }
 
@@ -281,6 +287,50 @@ struct ConnectivityView: View {
         return SpeedTest.aggregate(byteSamples: rates, latenciesMs: lats)
     }
 
+    /// Recent-attempts log (PRD §β): the last few Get-Online checks with their
+    /// network and classified outcome.
+    @ViewBuilder private var historyCard: some View {
+        if !history.isEmpty {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Eyebrow(text: "Recent", glyph: "clock.arrow.circlepath", color: accent)
+                    ForEach(Array(history.prefix(5).enumerated()), id: \.offset) { _, h in
+                        HStack(spacing: 8) {
+                            Circle().fill(Self.reasonColor(h.reason)).frame(width: 6, height: 6)
+                            Text(h.ssid ?? NSLocalizedString("Wi-Fi", comment: ""))
+                                .font(Brand.sans(12)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(Self.reasonLabel(h.reason)).font(Brand.mono(10)).foregroundStyle(Brand.textSecondary)
+                            Text(Self.relative(h.at)).font(Brand.mono(9))
+                                .foregroundStyle(Brand.textTertiary).frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static func reasonLabel(_ r: String) -> String {
+        switch r {
+        case "ok":              return NSLocalizedString("online", comment: "")
+        case "captivePortal":   return NSLocalizedString("portal", comment: "")
+        case "loginUnreachable": return NSLocalizedString("login down", comment: "")
+        default:                return NSLocalizedString("offline", comment: "")
+        }
+    }
+    private static func reasonColor(_ r: String) -> Color {
+        switch r {
+        case "ok":            return Brand.green
+        case "captivePortal": return Brand.amber
+        default:              return Brand.red
+        }
+    }
+    private static func relative(_ d: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f.localizedString(for: d, relativeTo: Date())
+    }
+
     private func scanNearby() {
         scanning = true
         Task.detached(priority: .utility) {
@@ -368,11 +418,13 @@ struct ConnectivityView: View {
             iface = result.interface
             loading = false
             loaded = true
-        }
-        // Recognise the venue from the SSID, off-main (CoreWLAN can block).
-        Task.detached(priority: .utility) {
-            let v = ConnectivityView.currentSSID().flatMap { VenueMatcher.match(ssid: $0) }
-            await MainActor.run { venue = v }
+            // Venue + history both need the SSID — read it once, off-main.
+            let ssid = await Task.detached(priority: .utility) { ConnectivityView.currentSSID() }.value
+            venue = ssid.flatMap { VenueMatcher.match(ssid: $0) }
+            let online = result.checks.contains { $0.id == "internet" && $0.status == .ok }
+            let portal = result.checks.contains { $0.id == "portal" }
+            let reason = ConnectionFailureClassifier.classify(online: online, portal: portal, loginReachable: portal)
+            history = ConnectionHistory.record(ssid: ssid, reason: reason.rawValue, at: Date())
         }
     }
 }
