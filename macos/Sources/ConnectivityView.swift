@@ -14,6 +14,7 @@
 
 import SwiftUI
 import AppKit
+import CoreWLAN
 
 struct ConnectivityView: View {
     var isActive: Bool = true
@@ -24,6 +25,8 @@ struct ConnectivityView: View {
     @State private var loaded = false
     @State private var actionBusy: Connectivity.Fix?
     @State private var actionResult: String?
+    /// Venue-specific captive-portal tips when the SSID is recognised (PRD §β).
+    @State private var venue: VenueMatcher.Venue?
 
     private var accent: Color { Tool.status.accent }
 
@@ -31,6 +34,7 @@ struct ConnectivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                if let venue { venueCard(venue) }
                 actionsCard
                 ForEach(checks) { checkRow($0) }
                 if loaded, checks.isEmpty {
@@ -118,6 +122,30 @@ struct ConnectivityView: View {
         }
     }
 
+    /// Venue-specific captive-portal tips when the SSID is recognised (PRD §β).
+    private func venueCard(_ v: VenueMatcher.Venue) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: v.name, glyph: "mappin.and.ellipse", color: accent)
+                ForEach(Array(v.tips.enumerated()), id: \.offset) { _, tip in
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: "lightbulb")
+                            .font(.system(size: 11)).foregroundStyle(accent)
+                        Text(tip).font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Current Wi-Fi SSID. nil when not on Wi-Fi, or when Location access (which
+    /// macOS now gates the SSID behind) hasn't been granted — the venue card just
+    /// stays hidden. Off-main: CoreWLAN reads can block.
+    private static func currentSSID() -> String? {
+        CWWiFiClient.shared().interface()?.ssid()
+    }
+
     private func checkRow(_ c: Connectivity.Check) -> some View {
         GlassCard {
             HStack(alignment: .top, spacing: 12) {
@@ -179,6 +207,11 @@ struct ConnectivityView: View {
             iface = result.interface
             loading = false
             loaded = true
+        }
+        // Recognise the venue from the SSID, off-main (CoreWLAN can block).
+        Task.detached(priority: .utility) {
+            let v = ConnectivityView.currentSSID().flatMap { VenueMatcher.match(ssid: $0) }
+            await MainActor.run { venue = v }
         }
     }
 }
