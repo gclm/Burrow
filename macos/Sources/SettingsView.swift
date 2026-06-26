@@ -60,6 +60,10 @@ struct SettingsView: View {
     @State private var thresholdAlerts: Bool = Store.thresholdAlertsEnabled
     @State private var cpuAlertThreshold: Int = Store.cpuAlertThreshold
     @State private var memAlertThreshold: Int = Store.memAlertThreshold
+    @State private var processWatchdog: Bool = Store.processWatchdogEnabled
+    @State private var procWatchdogCPU: Int = Int(Store.processWatchdogCPU)
+    @State private var procWatchdogSeconds: Int = Store.processWatchdogSeconds
+    @State private var procWatchdogAction: String = Store.processWatchdogAction
     @State private var showRestore = false
     @State private var brewBusy = false
     @State private var brewSnapshotStatus = ""
@@ -282,6 +286,30 @@ struct SettingsView: View {
                             .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
                     }
                     .onChange(of: memAlertThreshold) { _, v in Store.memAlertThreshold = v }
+                }
+                toggleRow("High-CPU process watchdog", isOn: $processWatchdog) { Store.processWatchdogEnabled = $0 }
+                footnote("Acts automatically on a process that stays pegged. Off by default — Suspend and Quit only affect your own processes; Notify just warns you.")
+                if processWatchdog {
+                    Stepper(value: $procWatchdogCPU, in: 50...100, step: 5) {
+                        Text(String(format: NSLocalizedString("When a process stays above %d%% CPU", comment: ""), procWatchdogCPU))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: procWatchdogCPU) { _, v in Store.processWatchdogCPU = Double(v) }
+                    Stepper(value: $procWatchdogSeconds, in: 10...300, step: 10) {
+                        Text(String(format: NSLocalizedString("for at least %d seconds", comment: ""), procWatchdogSeconds))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: procWatchdogSeconds) { _, v in Store.processWatchdogSeconds = v }
+                    Picker(selection: $procWatchdogAction) {
+                        Text(NSLocalizedString("Notify me", comment: "")).tag("notify")
+                        Text(NSLocalizedString("Suspend it", comment: "")).tag("suspend")
+                        Text(NSLocalizedString("Quit it", comment: "")).tag("quit")
+                    } label: {
+                        Text(NSLocalizedString("Then", comment: ""))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: procWatchdogAction) { _, v in Store.processWatchdogAction = v }
                 }
             }
 
