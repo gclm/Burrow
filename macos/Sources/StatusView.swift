@@ -584,6 +584,7 @@ struct ProcessCard: View {
     private static let rowCap = 100
     @State private var showAll = false
     @State private var inspecting: ProcessInspectTarget?
+    @State private var showTree = false
 
     var body: some View {
         let all = model.sortedRows
@@ -620,6 +621,9 @@ struct ProcessCard: View {
         }
         .sheet(item: $inspecting) { target in
             ProcessInspectorView(proc: target.proc, processes: model.processes)
+        }
+        .sheet(isPresented: $showTree) {
+            ProcessTreeView(processes: model.processes)
         }
     }
 
@@ -673,20 +677,23 @@ struct ProcessCard: View {
         .padding(.vertical, 9)
     }
 
-    /// Table-level export of the current (sorted) process set to the clipboard
-    /// (PRD §α Process Inspector). Threads aren't in the `ps` sample → 0.
+    /// Table-level actions (PRD §α Process Inspector): a process-tree view and
+    /// export of the current (sorted) set to the clipboard. Threads aren't in
+    /// the `ps` sample → 0.
     private var exportMenu: some View {
         Menu {
+            Button(NSLocalizedString("Process Tree…", comment: "")) { showTree = true }
+            Divider()
             Button(NSLocalizedString("Copy as CSV", comment: "")) { copyExport(asCSV: true) }
             Button(NSLocalizedString("Copy as JSON", comment: "")) { copyExport(asCSV: false) }
         } label: {
-            Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 10)).foregroundStyle(Brand.textTertiary)
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
                 .frame(width: 20, height: 20).contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
-        .help(NSLocalizedString("Export the process list", comment: ""))
-        .accessibilityLabel(NSLocalizedString("Export the process list", comment: ""))
+        .help(NSLocalizedString("Process tree and export", comment: ""))
+        .accessibilityLabel(NSLocalizedString("Process tree and export", comment: ""))
     }
 
     private func copyExport(asCSV: Bool) {
