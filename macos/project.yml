@@ -85,6 +85,20 @@ targets:
     dependencies:
       - package: PostHog
       - package: Sentry
+    postCompileScripts:
+      - name: Bundle burrow-engine (MIT)
+        basedOnDependencyAnalysis: false
+        script: |
+          # Stage the MIT engine into the app's Resources so users run our engine with zero
+          # install (never upstream GPL mo). Activates when the engine source is present —
+          # a release/CI vendors it (vendor/burrow-engine) or sets BURROW_ENGINE_SRC; dev
+          # builds without it fall back to a system-installed engine.
+          ENGINE_SRC="${BURROW_ENGINE_SRC:-$SRCROOT/vendor/burrow-engine}"
+          if [ -d "$ENGINE_SRC" ]; then
+            "$SRCROOT/scripts/bundle-engine.sh" "$ENGINE_SRC" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          else
+            echo "warning: burrow-engine not found at $ENGINE_SRC — Burrow falls back to a system engine. Set BURROW_ENGINE_SRC or add the vendor/burrow-engine submodule."
+          fi
 
   BurrowTests:
     type: bundle.unit-test
