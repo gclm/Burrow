@@ -32,6 +32,10 @@ struct ConnectivityView: View {
     @State private var nearby: [NearbyNetworks.Net] = []
     @State private var scanning = false
     @State private var scanned = false
+    /// On-demand throughput + latency test (PRD §β). User-initiated — it
+    /// transfers data to/from Cloudflare's public speed endpoint.
+    @State private var speed: SpeedTest.Result?
+    @State private var speedTesting = false
 
     private var accent: Color { Tool.status.accent }
 
@@ -46,6 +50,7 @@ struct ConnectivityView: View {
                     Text(NSLocalizedString("Couldn't run the checks.", comment: ""))
                         .font(Brand.sans(13)).foregroundStyle(Brand.textSecondary)
                 }
+                speedCard
                 nearbyCard
             }
             .padding(20)
@@ -196,6 +201,84 @@ struct ConnectivityView: View {
                 }
             }
         }
+    }
+
+    /// Speed-test card (PRD §β): throughput + latency, on demand.
+    private var speedCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Eyebrow(text: "Speed Test", glyph: "speedometer", color: accent)
+                    Spacer()
+                    if speedTesting {
+                        ProgressView().controlSize(.small).tint(accent)
+                    } else {
+                        Button(speed == nil ? NSLocalizedString("Test", comment: "")
+                                            : NSLocalizedString("Retest", comment: "")) { runSpeedTest() }
+                            .buttonStyle(.plain).font(Brand.sans(11, .semibold)).foregroundStyle(accent)
+                    }
+                }
+                if let speed {
+                    HStack(spacing: 20) {
+                        metric(String(format: "%.0f", speed.mbps), NSLocalizedString("Mbps down", comment: ""))
+                        metric(String(format: "%.0f ms", speed.jitterMs), NSLocalizedString("jitter", comment: ""))
+                        metric(String(format: "%.0f%%", speed.lossPercent), NSLocalizedString("loss", comment: ""))
+                    }
+                } else if speedTesting {
+                    Text(NSLocalizedString("Measuring…", comment: ""))
+                        .font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
+                } else {
+                    Text(NSLocalizedString("Measures download throughput and latency against Cloudflare.", comment: ""))
+                        .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func metric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(Brand.mono(16, .medium)).foregroundStyle(Brand.textPrimary)
+            Text(label).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+        }
+    }
+
+    private func runSpeedTest() {
+        speedTesting = true
+        Task.detached(priority: .userInitiated) {
+            let r = await ConnectivityView.measureSpeed()
+            await MainActor.run {
+                speed = r
+                speedTesting = false
+            }
+        }
+    }
+
+    /// Throughput from a few timed downloads (per-second byte rates) + latency
+    /// from a few small-payload round trips, aggregated by the tested SpeedTest
+    /// module. Cloudflare's `__down` endpoint is public + CORS-open. nil on
+    /// total failure (offline) → the card keeps its idle copy.
+    private static func measureSpeed() async -> SpeedTest.Result? {
+        let down = URL(string: "https://speed.cloudflare.com/__down?bytes=8000000")!
+        let ping = URL(string: "https://speed.cloudflare.com/__down?bytes=1")!
+        var rates: [Int64] = []
+        for _ in 0..<3 {
+            let start = Date()
+            guard let (data, _) = try? await URLSession.shared.data(from: down) else { continue }
+            let elapsed = Date().timeIntervalSince(start)
+            guard elapsed > 0 else { continue }
+            rates.append(Int64(Double(data.count) / elapsed))   // bytes per second
+        }
+        var lats: [Double?] = []
+        for _ in 0..<5 {
+            let start = Date()
+            if (try? await URLSession.shared.data(from: ping)) != nil {
+                lats.append(Date().timeIntervalSince(start) * 1000)
+            } else {
+                lats.append(nil)
+            }
+        }
+        guard !rates.isEmpty else { return nil }
+        return SpeedTest.aggregate(byteSamples: rates, latenciesMs: lats)
     }
 
     private func scanNearby() {
