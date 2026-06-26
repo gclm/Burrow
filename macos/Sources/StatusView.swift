@@ -583,6 +583,7 @@ struct ProcessCard: View {
     /// that bounded; "Show all" opts back into the full list.
     private static let rowCap = 100
     @State private var showAll = false
+    @State private var inspecting: ProcessInspectTarget?
 
     var body: some View {
         let all = model.sortedRows
@@ -604,7 +605,8 @@ struct ProcessCard: View {
                         ForEach(rows, id: \.pid) { p in
                             ProcRow(p: p,
                                     pinned: model.pinned.contains(p.pid),
-                                    energy: model.energies[p.pid]) {
+                                    energy: model.energies[p.pid],
+                                    onInspect: { inspecting = ProcessInspectTarget(proc: p) }) {
                                 model.togglePin(p.pid)
                             }
                         }
@@ -615,6 +617,9 @@ struct ProcessCard: View {
                 .scrollIndicators(.automatic)
                 .frame(height: 195)
             }
+        }
+        .sheet(item: $inspecting) { target in
+            ProcessInspectorView(proc: target.proc, processes: model.processes)
         }
     }
 
@@ -715,6 +720,7 @@ struct ProcRow: View {
     let pinned: Bool
     /// Cumulative billed energy (nJ) — nil renders "—", never estimated.
     var energy: UInt64? = nil
+    var onInspect: () -> Void = {}
     let onPin: () -> Void
     @State private var hover = false
 
@@ -771,6 +777,7 @@ struct ProcRow: View {
     private enum L {
         static let pin = NSLocalizedString("Pin", comment: "")
         static let unpin = NSLocalizedString("Unpin", comment: "")
+        static let inspect = NSLocalizedString("Inspect…", comment: "")
         static let reveal = NSLocalizedString("Reveal in Finder", comment: "")
         static let copyName = NSLocalizedString("Copy name", comment: "")
         static let copyPID = NSLocalizedString("Copy PID", comment: "")
@@ -785,6 +792,8 @@ struct ProcRow: View {
     private var rowMenu: some View {
         Menu {
             Button(pinned ? L.unpin : L.pin) { onPin() }
+            Button(L.inspect) { onInspect() }
+            Divider()
             Button(L.reveal) {
                 if let path = ProcessActions.executablePath(pid: p.pid) {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
