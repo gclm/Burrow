@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// Groups + summary for the receipt, ticker state for the live view —
 /// one reduce pass over the same lines.
@@ -20,14 +21,33 @@ typealias OptimizeReport = (groups: [TaskGroup], summary: TaskSummary?, ticker: 
 struct OptimizeView: View {
     @StateObject private var flow = OperationFlow<OptimizeReport>()
     @State private var preview = false
+    @State private var guardWarnings: [String] = []
 
     var body: some View {
         switch flow.state {
         case .idle:
-            ToolHero(tool: .optimize, title: "Optimize", subtitle: Tool.optimize.tagline) {
-                PillButton(title: "Optimize") { runOptimize() }
-                PillButton(title: "Preview", filled: false) { runPreview() }
+            VStack(spacing: 12) {
+                if !guardWarnings.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(guardWarnings, id: \.self) { w in
+                            HStack(alignment: .top, spacing: 7) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 11)).foregroundStyle(Brand.gold)
+                                Text(w).font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Brand.gold.opacity(0.12)))
+                    .padding(.horizontal, 20)
+                }
+                ToolHero(tool: .optimize, title: "Optimize", subtitle: Tool.optimize.tagline) {
+                    PillButton(title: "Optimize") { runOptimize() }
+                    PillButton(title: "Preview", filled: false) { runPreview() }
+                }
             }
+            .task { await computeGuards() }
         case .gated(let pending):
             FullDiskAccessRequired(
                 accent: Tool.optimize.accent,
@@ -147,5 +167,32 @@ struct OptimizeView: View {
         flow.start(operation(["optimize", "--dry-run"],
                              gate: .fullDiskAccess(adminBypass: true), elevated: false,
                              label: NSLocalizedString("Optimize preview", comment: "")))
+    }
+
+    /// Pre-run safety guards (PRD §Optimize): warn if a VPN or an external
+    /// display is active. (Audio / Bluetooth-input detectors are a follow-up.)
+    private func computeGuards() async {
+        let displays = NSScreen.screens.count
+        let vpn = await Task.detached(priority: .utility) {
+            Connectivity.vpnConnected(fromScutilNC: OptimizeView.runCmd("/usr/sbin/scutil", ["--nc", "list"]))
+        }.value
+        var s = OptimizeGuards.State()
+        s.vpnActive = vpn
+        s.externalDisplay = displays > 1
+        guardWarnings = OptimizeGuards.warnings(s)
+    }
+
+    private static func runCmd(_ path: String, _ args: [String]) -> String {
+        guard FileManager.default.isExecutableFile(atPath: path) else { return "" }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        do { try p.run() } catch { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
     }
 }
