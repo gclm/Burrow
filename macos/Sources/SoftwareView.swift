@@ -331,8 +331,12 @@ struct AppRow: View {
             .padding(10)
         } else if let preview, !preview.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                // Header: name + mono bundle path · k/n selected · select all
+                // Header: name + mono bundle path · k/n selected · clear-data · select all
                 HStack {
+                    // "Clear Data" = every leftover except the .app bundle. Shown only
+                    // when there's a bundle to exclude, so it's always a true subset
+                    // (kept app, removed data) routed through the native-trash path.
+                    let dataPaths = UninstallPlan.dataOnly(preview.entries.map(\.path))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(app.name).font(Brand.sans(12, .semibold)).foregroundStyle(Brand.textPrimary)
                         Text(prettyPath).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
@@ -341,6 +345,13 @@ struct AppRow: View {
                     Spacer()
                     Text(verbatim: "\(pathSelection.count)/\(preview.entries.count) selected")
                         .font(Brand.mono(10)).foregroundStyle(Brand.textSecondary)
+                    if dataPaths.count < preview.entries.count {
+                        Button(NSLocalizedString("Clear Data", comment: "")) {
+                            pathSelection = Set(dataPaths)
+                        }
+                        .buttonStyle(.plain).font(Brand.sans(10, .semibold)).foregroundStyle(Tool.apps.accent)
+                        .help(NSLocalizedString("Select everything except the app itself — removes its data but keeps the app installed.", comment: ""))
+                    }
                     Button(NSLocalizedString("Select all", comment: "")) {
                         pathSelection = Set(preview.entries.map(\.path))
                     }
@@ -420,6 +431,11 @@ struct AppRow: View {
                 .frame(width: 96, alignment: .leading)
             Text(entry.path).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
                 .lineLimit(1).truncationMode(.middle)
+            if UninstallPlan.isInputMethod(entry.path) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9)).foregroundStyle(Brand.gold)
+                    .help(NSLocalizedString("Input method — removing this can disable typing for its language until you log out.", comment: ""))
+            }
             Spacer()
             Button { AnalyzeIcons.reveal(entry.expandedPath) } label: {
                 Image(systemName: "magnifyingglass.circle").font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
