@@ -336,7 +336,7 @@ struct AppRow: View {
                     // "Clear Data" = every leftover except the .app bundle. Shown only
                     // when there's a bundle to exclude, so it's always a true subset
                     // (kept app, removed data) routed through the native-trash path.
-                    let dataPaths = UninstallPlan.dataOnly(preview.entries.map(\.path))
+                    let dataPaths = UninstallPlan.dataOnly(paths: preview.entries.map(\.path))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(app.name).font(Brand.sans(12, .semibold)).foregroundStyle(Brand.textPrimary)
                         Text(prettyPath).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
