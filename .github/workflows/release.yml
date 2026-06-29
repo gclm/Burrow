@@ -51,6 +51,29 @@ jobs:
       # not be able to run new code here. Comment keeps the version legible.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      # Fetch the bundled MIT engine (burrow-engine) at its PINNED submodule
+      # commit so a release embeds OUR engine — the exact one the PR reviewed,
+      # not whatever HEAD happens to be — instead of resolving system `mo`.
+      # burrow-engine is a PRIVATE repo, so set ENGINE_PAT (a PAT with
+      # Contents:Read on caezium/burrow-engine); TAP_PAT can't be reused — it's
+      # fine-grained to the tap. NON-FATAL on purpose: without access the
+      # release still ships, just without the bundled engine, so the app falls
+      # back to system `mo` exactly as before this migration (set ENGINE_PAT,
+      # or make burrow-engine public, to actually bundle it).
+      - name: Fetch bundled engine submodule (non-fatal)
+        env:
+          ENGINE_PAT: ${{ secrets.ENGINE_PAT }}
+        run: |
+          if [ -n "$ENGINE_PAT" ]; then
+            git config --global url."https://x-access-token:${ENGINE_PAT}@github.com/".insteadOf "https://github.com/"
+          fi
+          if git submodule update --init --recursive macos/vendor/burrow-engine; then
+            echo "engine: checked out at pinned commit $(git -C macos/vendor/burrow-engine rev-parse --short HEAD)"
+          else
+            echo "::warning::burrow-engine submodule unavailable — set ENGINE_PAT (private repo) or make it public. Shipping WITHOUT the bundled engine; the app resolves system \`mo\`, as before this migration."
+          fi
+          git config --global --unset-all url."https://x-access-token:${ENGINE_PAT}@github.com/".insteadOf 2>/dev/null || true
+
       # Use the newest Xcode on the runner so xcodebuild can read the project
       # format xcodegen emits (Homebrew's xcodegen targets the latest Xcode).
       - name: Select newest Xcode
@@ -135,6 +158,19 @@ jobs:
               find "$APP/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) -print0 \
                 | while IFS= read -r -d '' f; do codesign --force --sign - "$f"; done
             fi
+            # The bundled MIT engine ships nested Mach-O helpers (status-go,
+            # analyze-go). Re-sign them with the app's ad-hoc identity too, so
+            # the whole bundle carries one coherent signature — the same
+            # inside-out pass we do for frameworks. (bundle-engine.sh ad-hoc
+            # signs them at build time, but best-effort/`|| true`; this makes it
+            # authoritative and is what the Developer ID path below relies on.)
+            # Filter by Mach-O magic so the shell entrypoint + lib/*.sh skip.
+            if [ -d "$APP/Contents/Resources/engine" ]; then
+              find "$APP/Contents/Resources/engine" -type f -print0 \
+                | while IFS= read -r -d '' f; do
+                    if file -b "$f" | grep -q 'Mach-O'; then codesign --force --sign - "$f"; fi
+                  done
+            fi
             codesign --force --sign - --entitlements macos/Resources/Burrow.entitlements "$APP"
             codesign --verify --strict --verbose=2 "$APP"
             echo "signed=false" >> "$GITHUB_OUTPUT"
@@ -160,6 +196,18 @@ jobs:
             find "$APP/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) -print0 \
               | while IFS= read -r -d '' f; do
                   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$f"
+                done
+          fi
+          # The bundled engine's nested Mach-O helpers (status-go, analyze-go)
+          # need Developer ID + hardened runtime + secure timestamp too — every
+          # embedded Mach-O must be signed this way or notarization rejects the
+          # submission. (Mach-O filter skips the shell entrypoint + lib/*.sh.)
+          if [ -d "$APP/Contents/Resources/engine" ]; then
+            find "$APP/Contents/Resources/engine" -type f -print0 \
+              | while IFS= read -r -d '' f; do
+                  if file -b "$f" | grep -q 'Mach-O'; then
+                    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$f"
+                  fi
                 done
           fi
           # Hardened runtime + secure timestamp are required for notarization.
