@@ -99,10 +99,16 @@ targets:
           # therefore happens POST-build: use scripts/build.sh locally, and the release
           # pipeline's inside-out re-sign (#178) seals it for distribution.
           ENGINE_SRC="${BURROW_ENGINE_SRC:-$SRCROOT/vendor/burrow-engine}"
-          if [ -d "$ENGINE_SRC" ]; then
+          # Require a real engine checkout, not just the directory: a plain
+          # (no-submodule) checkout — e.g. the PR `ci` job — leaves an EMPTY
+          # vendor/burrow-engine dir for the gitlink, so `[ -d ]` alone would be
+          # true and bundle-engine.sh would then fail building from missing
+          # source. Gate on mole + cmd/ so we bundle only a populated checkout
+          # and otherwise fall through to the system engine (build still green).
+          if [ -f "$ENGINE_SRC/mole" ] && [ -d "$ENGINE_SRC/cmd" ]; then
             "$SRCROOT/scripts/bundle-engine.sh" "$ENGINE_SRC" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
           else
-            echo "warning: burrow-engine not found at $ENGINE_SRC — Burrow falls back to a system engine. Set BURROW_ENGINE_SRC or add the vendor/burrow-engine submodule."
+            echo "warning: burrow-engine source not present at $ENGINE_SRC — Burrow falls back to a system engine. Set BURROW_ENGINE_SRC or init the vendor/burrow-engine submodule."
           fi
 
   BurrowTests:
