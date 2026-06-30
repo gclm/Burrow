@@ -51,16 +51,35 @@ jobs:
       # not be able to run new code here. Comment keeps the version legible.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      # NOTE: engine bundling is temporarily DISABLED. Fetching burrow-engine in
-      # this job (whether an in-tree submodule OR an out-of-tree clone) reliably
-      # made xcodebuild's SPM hang forever resolving Sentry's binary xcframeworks
-      # — proven by isolation: with no engine-fetch step the build ships in ~6
-      # min, and the engine-less 0.9.0 was published this way. ci.yml has no
-      # engine step and never hangs; `curl` fetches the same 66 MB Sentry
-      # artifact in <1s, so it's not the network, and global git config stays
-      # clean. The mechanism needs local Xcode SPM verbose logs to crack; until
-      # then the app ships resolving system `mo`, exactly as in 0.8.x. To
-      # re-enable, restore the fetch step (see git history) once it's fixed.
+      # Fetch the bundled MIT engine OUTSIDE the work tree (RUNNER_TEMP), at its
+      # pinned submodule commit. (The earlier "engine fetch hangs SPM" was a red
+      # herring: the real cause is flaky Sentry binary-artifact downloads —
+      # transient TLS failures that error locally but STALL on CI — now handled
+      # by the retried resolve in scripts/release.sh.) NON-FATAL: without
+      # ENGINE_PAT the app falls back to system `mo`. Token scoped via `git -c`.
+      - name: Fetch bundled engine (outside the work tree)
+        env:
+          ENGINE_PAT: ${{ secrets.ENGINE_PAT }}
+        run: |
+          SHA="$(git ls-tree HEAD macos/vendor/burrow-engine | awk '{print $3}')"
+          DEST="$RUNNER_TEMP/burrow-engine"
+          AUTH=()
+          [ -n "$ENGINE_PAT" ] && AUTH=(-c "url.https://x-access-token:${ENGINE_PAT}@github.com/.insteadOf=https://github.com/")
+          if git "${AUTH[@]}" clone --quiet https://github.com/caezium/burrow-engine.git "$DEST" \
+             && git -C "$DEST" -c advice.detachedHead=false checkout --quiet "$SHA"; then
+            echo "BURROW_ENGINE_SRC=$DEST" >> "$GITHUB_ENV"
+            echo "engine: cloned to $DEST @ ${SHA:0:7}"
+          else
+            echo "::warning::burrow-engine unavailable — set ENGINE_PAT or make it public. Shipping WITHOUT the bundled engine; app falls back to system \`mo\`."
+          fi
+
+      # Pin a Go that satisfies the engine's go.mod (>= 1.25) for the bundle
+      # phase's `go build`. Harmless when the engine isn't fetched.
+      - name: Set up Go (for the bundled engine)
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.26"
+          cache: false
 
       # Use the newest Xcode on the runner so xcodebuild can read the project
       # format xcodegen emits (Homebrew's xcodegen targets the latest Xcode).
@@ -78,37 +97,11 @@ jobs:
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          # The release build can stall in SPM while fetching Sentry's binary
-          # xcframeworks — a flaky GitHub-release download; on a disk-tight runner
-          # the extractor also prompts "Continue? (y/n)" and then blocks on stdin
-          # forever (that was the 0.9.0 40-min hang). Make it non-blocking and
-          # self-healing: run with stdin CLOSED so any prompt fails fast instead
-          # of hanging, and retry with a per-attempt time bound so a true network
-          # stall is killed and re-attempted rather than eating the whole job.
-          attempt_build() {
-            local secs=720 rc
-            bash scripts/release.sh </dev/null &
-            local pid=$!
-            ( sleep "$secs"
-              if kill -0 "$pid" 2>/dev/null; then
-                echo "::warning::build attempt exceeded ${secs}s — terminating to retry"
-                pkill -TERM -P "$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
-                sleep 5; pkill -KILL -P "$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null
-              fi ) &
-            local watcher=$!
-            wait "$pid" && rc=0 || rc=$?
-            kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null || true
-            return $rc
-          }
-          ok=
-          for attempt in 1 2; do
-            echo "::group::Release build — attempt ${attempt}"
-            if attempt_build; then ok=1; echo "::endgroup::"; echo "build OK on attempt ${attempt}"; break; fi
-            echo "::endgroup::"
-            echo "::warning::release build attempt ${attempt} failed/stalled; retrying"
-            sleep 10
-          done
-          [ -n "$ok" ] || { echo "::error::release build failed after retries"; exit 1; }
+          # SPM's flaky Sentry binary-artifact downloads are handled INSIDE
+          # scripts/release.sh now (retried `-resolvePackageDependencies` with a
+          # per-attempt watchdog, then a build with -disableAutomaticPackageResolution).
+          # So this is a plain call; the step timeout-minutes above is the cap.
+          bash scripts/release.sh
           APP="build_dist/Build/Products/Release/Burrow.app"
           [ -d "$APP" ] || { echo "::error::build produced no app at $APP"; exit 1; }
           VERSION=$(defaults read "$PWD/$APP/Contents/Info" CFBundleShortVersionString)
