@@ -77,7 +77,11 @@ Windows: download from [releases](https://github.com/caezium/Burrow/releases)
   <em>Explain with AI — point an MCP-capable agent (Claude Code, or a local model via LM Studio) at Burrow and ask your Mac in plain language.</em>
   <br>
   <img alt="Explain with AI — burrow_snapshot analyzed in plain language" src="https://raw.githubusercontent.com/caezium/Burrow/main/docs/assets/shot-ai.png">
+  <em>When doing other tasks with AI Agents, if they find something irregular with your system, for example low disk space, they will have the tools to automatically disect the problem, and perform secure cleanups for you proactively and autonomously, without you having to ask.</em>
+  <br>
+  <img width="1177" height="887" alt="image" src="https://github.com/user-attachments/assets/e067a39f-808b-41a8-ac02-9dd19cabf929" />
 </p>
+
 
 <p align="center">
   <img width="320" alt="Menu-bar HUD — health, metric tiles, top processes, and live job status" src="https://github.com/user-attachments/assets/105ef0ca-b970-4eec-8604-db21f458b816">
