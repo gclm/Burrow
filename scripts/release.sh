@@ -26,41 +26,9 @@ echo "==> xcodegen generate"
 
 echo "==> building Release (no Developer ID; ad-hoc signed below)"
 rm -rf build_dist
-
-# Resolve Swift packages with retries FIRST, then build against the result.
-# Sentry ships several large binary xcframeworks; SPM's downloader hits transient
-# TLS failures fetching them — which error locally and STALL indefinitely on CI
-# (this was the 0.9.0 release "hang"). A re-resolve resumes the partial download
-# and converges (verified locally). Bound each attempt — macOS has no `timeout`,
-# so use a background watchdog — so a stall is killed and retried, not hung.
-resolve_packages() {
-  local secs=300 attempt pid watcher rc
-  for attempt in 1 2 3 4 5 6; do
-    echo "==> resolving Swift packages (attempt $attempt)"
-    xcodebuild -project macos/Burrow.xcodeproj -scheme Burrow \
-      -resolvePackageDependencies -derivedDataPath build_dist &
-    pid=$!
-    ( sleep "$secs"; kill -0 "$pid" 2>/dev/null && {
-        echo "==> resolve exceeded ${secs}s — terminating to retry"
-        pkill -TERM -P "$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
-        sleep 3; pkill -KILL -P "$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null; }; ) &
-    watcher=$!
-    wait "$pid" && rc=0 || rc=$?
-    kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null || true
-    [ "$rc" = 0 ] && return 0
-    echo "==> resolve attempt $attempt failed/stalled (rc=$rc); retrying"
-    sleep 5
-  done
-  return 1
-}
-resolve_packages || { echo "SPM package resolution failed after retries"; exit 1; }
-
-# Build reusing the already-resolved packages (-disableAutomaticPackageResolution
-# → no re-download, so the flaky fetch can't recur during the build).
 xcodebuild -project macos/Burrow.xcodeproj -scheme Burrow \
   -configuration Release -destination 'generic/platform=macOS' \
   -derivedDataPath build_dist \
-  -disableAutomaticPackageResolution \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
   POSTHOG_API_KEY="${POSTHOG_API_KEY:-}" \
   POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}" \
