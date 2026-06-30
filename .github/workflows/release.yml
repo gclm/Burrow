@@ -97,12 +97,43 @@ jobs:
 
       - name: Build (Release)
         id: build
+        timeout-minutes: 38
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          bash scripts/release.sh
+          # The release build can stall in SPM while fetching Sentry's binary
+          # xcframeworks — a flaky GitHub-release download; on a disk-tight runner
+          # the extractor also prompts "Continue? (y/n)" and then blocks on stdin
+          # forever (that was the 0.9.0 40-min hang). Make it non-blocking and
+          # self-healing: run with stdin CLOSED so any prompt fails fast instead
+          # of hanging, and retry with a per-attempt time bound so a true network
+          # stall is killed and re-attempted rather than eating the whole job.
+          attempt_build() {
+            local secs=900 rc
+            bash scripts/release.sh </dev/null &
+            local pid=$!
+            ( sleep "$secs"
+              if kill -0 "$pid" 2>/dev/null; then
+                echo "::warning::build attempt exceeded ${secs}s — terminating to retry"
+                pkill -TERM -P "$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+                sleep 5; pkill -KILL -P "$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null
+              fi ) &
+            local watcher=$!
+            wait "$pid" && rc=0 || rc=$?
+            kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null || true
+            return $rc
+          }
+          ok=
+          for attempt in 1 2; do
+            echo "::group::Release build — attempt ${attempt}"
+            if attempt_build; then ok=1; echo "::endgroup::"; echo "build OK on attempt ${attempt}"; break; fi
+            echo "::endgroup::"
+            echo "::warning::release build attempt ${attempt} failed/stalled; retrying"
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "::error::release build failed after retries"; exit 1; }
           APP="build_dist/Build/Products/Release/Burrow.app"
           [ -d "$APP" ] || { echo "::error::build produced no app at $APP"; exit 1; }
           VERSION=$(defaults read "$PWD/$APP/Contents/Info" CFBundleShortVersionString)
