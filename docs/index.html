@@ -323,7 +323,7 @@
 
   <!-- ===== HERO ===== -->
   <header class="hero">
-    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.8.3</span>
+    <span class="brandline">Open source · <b>github.com/caezium/Burrow</b> · v0.9.0</span>
     <h1>Burrow
       <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M14 74 a36 36 0 0 1 72 0 Z" fill="#F3ECDD"/><rect x="38" y="74" width="24" height="7" rx="3.5" fill="#121217"/></svg>
     </h1>
@@ -389,41 +389,42 @@
     <div class="sec-head wn-head">
       <div>
         <span class="sec-num">What's new · June 2026</span>
-        <h2 class="sec-title">New in 0.8.3</h2>
+        <h2 class="sec-title">New in 0.9.0</h2>
       </div>
       <a class="btn btn-out btn-sm" href="releases.html">All releases</a>
     </div>
 
     <div class="grid3 wn-grid">
       <article class="tcard" style="--c: var(--teal)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1114 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg></div><div class="nm">Real memory pressure</div></div>
-        <p class="ds">“By pressure” now reads actual macOS memory pressure — wired plus compressed over total, the same figure Activity Monitor shows — as a live percentage, colored by real load instead of a CPU-style ramp.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><div class="nm">Bundled engine</div></div>
+        <p class="ds">Burrow now ships its own MIT engine inside the app — a fork of Mole <code>mo</code> — so a fresh install needs no separate <code>brew install mole</code>. It runs the bundled engine first, falling back to a system <code>mo</code> for existing setups.</p>
       </article>
       <article class="tcard" style="--c: var(--azure)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20v-6M9 20V8M14 20v-9M19 20V5"/></svg></div><div class="nm">Power-draw widget</div></div>
-        <p class="ds">Live system wattage (W) as a menu-bar metric.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5A8 8 0 0120 12"/><path d="M7 12a5 5 0 0110 0c0 3-1 6-2.5 8"/><path d="M12 12c0 3-.6 5.5-1.8 7.6"/></svg></div><div class="nm">Process inspector</div></div>
+        <p class="ds">Click any process for a structured panel — identity, code signature, architecture, live CPU/memory, runtime, and its open network connections — plus a parent/child process tree.</p>
       </article>
       <article class="tcard" style="--c: var(--coral)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="16" width="8" height="5" rx="1"/></svg></div><div class="nm">Live menu-bar preview</div></div>
-        <p class="ds">Settings previews your real metrics as you configure them, with one-tap layout presets.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div><div class="nm">CPU watchdog</div></div>
+        <p class="ds">Set per-process CPU thresholds and get notified when something runs hot, with an editor in Settings. Filter, suspend/resume, and export the process table too.</p>
+      </article>
+      <article class="tcard" style="--c: var(--violet)">
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/></svg></div><div class="nm">Get Online companion</div></div>
+        <p class="ds">A speed test, a nearby-Wi-Fi scan with channel congestion, venue-specific captive-portal tips, and a connection-history log.</p>
       </article>
       <article class="tcard" style="--c: var(--gold)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.8 4.6L18 10l-4.2 1.4L12 16l-1.8-4.6L6 10l4.2-1.4z"/><path d="M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg></div><div class="nm">New runner animations</div></div>
-        <p class="ds">Wave and Bars join the built-in menu-bar runners.</p>
-      </article>
-      <article class="tcard" style="--c: var(--lilac)">
-        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg></div><div class="nm">Snappier popover</div></div>
-        <p class="ds">The metric grid no longer re-renders on unrelated changes, and CPU, memory, and GPU sparklines tick live every second.</p>
+        <div class="top"><div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg></div><div class="nm">Security-aware Doctor</div></div>
+        <p class="ds">SIP, Gatekeeper, FileVault, and firewall at a glance — plus battery health, a high-CPU check, and one-click Copy diagnostics.</p>
       </article>
     </div>
 
-    <div class="extra-label mono">// also tightened in 0.8.3</div>
+    <div class="extra-label mono">// also tightened in 0.9.0</div>
     <div class="wn-chips">
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Memory detail card: used / free / cached / swap</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>App-Hang reports from memory-starved Macs are dropped before sending</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Brewfile import/export pickers no longer trip the hang detector</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Temperature color ramp corrected</span>
-      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Windows preview: a version-aligned 0.8.3 build is attached</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Clean sorts the review by reclaimable impact and flags sensitive (keychain/credential) paths</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>All-time cleaned total on the Clean done screen</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>App Store updates needing a newer macOS are hidden; alias-aware app search</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>One-tap whole-disk Analyze, plus a treemap “Other” fold</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Optimize warns before running with a VPN or external display active</span>
+      <span class="wn-chip"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Three main-thread hangs on the new process surfaces fixed</span>
     </div>
     <!-- WN:END -->
   </section>

@@ -1,3 +1,67 @@
+# Burrow 0.9.0
+
+Burrow's biggest release. It now **bundles its own engine** — no separate `mo`
+install — and adds an Activity-Monitor-class **process inspector** with a CPU
+watchdog, a **Get Online** connectivity companion, a security-aware **Doctor**,
+and smarter Clean, Software, Analyze, and Optimize across the board. Still
+local-first, still free.
+
+## Engine
+- **Burrow bundles its own engine now.** The app ships an MIT-licensed
+  `burrow-engine` (a fork of Mole `mo` at its last MIT release) inside
+  `Burrow.app` and runs it directly — so a fresh install needs **no separate
+  `brew install mole`**. Burrow prefers the bundled engine, then an installed
+  `burrow-engine`, then a legacy system `mo` for existing setups. (#218)
+
+## Process inspector (Status)
+- **Per-process inspector** — click any process for a structured panel: identity
+  (path, code signature, Mach-O architecture), live CPU/memory, runtime, and the
+  process's open network connections.
+- **Process tree** — the parent/child hierarchy around any process.
+- **CPU watchdog** — set per-process CPU thresholds and get notified when
+  something runs hot, with an editor in Settings.
+- **Filter, suspend/resume, export** — a typed predicate filter over the process
+  table, suspend or resume a process, and export the table.
+
+## Get Online (connectivity companion)
+- **On-demand speed test** — measure real down/up throughput.
+- **Nearby Wi-Fi scan** — surrounding networks and channel congestion (Home
+  mode), so you can pick a clearer channel.
+- **Venue captive-portal tips** — venue-specific help for hotel/airport/café
+  portals that won't load.
+- **Connection history** — a log of connectivity events (SSID changes, drops).
+
+## Doctor (diagnostics)
+- **Security posture** — SIP, Gatekeeper, FileVault, and firewall at a glance,
+  plus a high-CPU check and one-click **Copy diagnostics**.
+- **Battery health** — capacity % and condition (omitted on desktops).
+- **More context** — display, external-volume, and network context.
+
+## Clean, Software, Analyze & Optimize
+- **Clean** now sorts the review **by reclaimable impact** and **flags sensitive
+  paths** (keychain/credential locations) before you delete; the done screen
+  shows your **all-time cleaned total**.
+- **Software** — App Store updates that need a newer macOS are hidden; ⌘R
+  refreshes with a cache bypass; app search is alias-aware.
+- **Uninstall** — a Clear-Data-only subset, plus an input-method leftover
+  warning.
+- **Analyze** — one-tap whole-disk scan, and a treemap "Other" fold for tiny
+  entries.
+- **Optimize** — a pre-run safety banner when a VPN or external display is
+  active.
+- **Login items** — modern Login (BTM) items appear in the startup inventory; a
+  LaunchAgent on an unplugged drive is no longer flagged broken.
+- **Keep Screen On** keeps working with the lid closed.
+
+## Fixed
+- **Three main-thread hangs** on the new process/parity surfaces (suspend/resume,
+  inspector, tree). (#216)
+- A missing `paths:` label on a data-only uninstall plan.
+
+## Windows
+- **Windows preview** — version-aligned to 0.9.0; no Windows-specific changes
+  this release.
+
 # Burrow 0.8.3
 
 A metrics & menu-bar release: real memory-pressure reporting, a power-draw

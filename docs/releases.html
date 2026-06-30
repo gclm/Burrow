@@ -123,13 +123,81 @@
 <header class="hero page">
   <h1>Changelog</h1>
   <p>Every version at a glance — what it added, changed, and fixed. Full notes for each live on GitHub.</p>
-  <p class="count">14 releases · latest 0.8.3 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
+  <p class="count">15 releases · latest 0.9.0 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
 </header>
 
 <main class="page">
+    <article class="entry" id="v0.9.0">
+      <div class="ver-col">
+        <h2 class="ver">0.9.0<span class="latest">latest</span></h2>
+        <span class="date mono">Jun 30, 2026</span>
+        <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.9.0" target="_blank" rel="noopener">full notes ↗</a>
+      </div>
+      <div class="sbody">
+        <p class="lead">Burrow's biggest release — it now bundles its own engine (no separate install), and adds an Activity-Monitor-class process inspector, a Get Online connectivity companion, and a security-aware Doctor.</p>
+        <div class="sblock">
+          <div class="slabel mono">engine</div>
+          <ul class="slist">
+            <li><b>Burrow bundles its own engine now.</b> The app ships an MIT-licensed <code>burrow-engine</code> (a fork of Mole <code>mo</code> at its last MIT release) inside <code>Burrow.app</code> and runs it directly — so a fresh install needs <b>no separate <code>brew install mole</code></b>. Burrow prefers the bundled engine, then an installed <code>burrow-engine</code>, then a legacy system <code>mo</code> for existing setups.</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">process inspector</div>
+          <ul class="slist">
+            <li><b>Per-process inspector</b> — click any process for a structured panel: identity (path, code signature, Mach-O architecture), live CPU/memory, runtime, and the process's open network connections.</li>
+            <li><b>Process tree</b> — the parent/child hierarchy around any process.</li>
+            <li><b>CPU watchdog</b> — set per-process CPU thresholds and get notified when something runs hot, with an editor in Settings.</li>
+            <li><b>Filter, suspend/resume, export</b> — a typed predicate filter over the process table, suspend or resume a process, and export the table.</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">get online</div>
+          <ul class="slist">
+            <li><b>On-demand speed test</b> — measure real down/up throughput.</li>
+            <li><b>Nearby Wi-Fi scan</b> — surrounding networks and channel congestion (Home mode), so you can pick a clearer channel.</li>
+            <li><b>Venue captive-portal tips</b> — venue-specific help for hotel/airport/café portals that won't load.</li>
+            <li><b>Connection history</b> — a log of connectivity events (SSID changes, drops).</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">doctor</div>
+          <ul class="slist">
+            <li><b>Security posture</b> — SIP, Gatekeeper, FileVault, and firewall at a glance, plus a high-CPU check and one-click <b>Copy diagnostics</b>.</li>
+            <li><b>Battery health</b> — capacity % and condition (omitted on desktops).</li>
+            <li><b>More context</b> — display, external-volume, and network context.</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">clean, software &amp; analyze</div>
+          <ul class="slist">
+            <li><b>Clean</b> now sorts the review <b>by reclaimable impact</b> and <b>flags sensitive paths</b> (keychain/credential locations) before you delete; the done screen shows your <b>all-time cleaned total</b>.</li>
+            <li><b>Software</b> — App Store updates that need a newer macOS are hidden; ⌘R refreshes with a cache bypass; app search is alias-aware.</li>
+            <li><b>Uninstall</b> — a Clear-Data-only subset, plus an input-method leftover warning.</li>
+            <li><b>Analyze</b> — one-tap whole-disk scan, and a treemap “Other” fold for tiny entries.</li>
+            <li><b>Optimize</b> — a pre-run safety banner when a VPN or external display is active.</li>
+            <li><b>Login items</b> — modern Login (BTM) items appear in the startup inventory; a LaunchAgent on an unplugged drive is no longer flagged broken.</li>
+            <li><b>Keep Screen On</b> keeps working with the lid closed.</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">fixed</div>
+          <ul class="slist">
+            <li><b>Three main-thread hangs</b> on the new process/parity surfaces (suspend/resume, inspector, tree).</li>
+            <li>A missing <code>paths:</code> label on a data-only uninstall plan.</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">windows</div>
+          <ul class="slist">
+            <li><b>Windows preview</b> — version-aligned to 0.9.0; no Windows-specific changes this release.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
     <article class="entry" id="v0.8.3">
       <div class="ver-col">
-        <h2 class="ver">0.8.3<span class="latest">latest</span></h2>
+        <h2 class="ver">0.8.3</h2>
         <span class="date mono">Jun 25, 2026</span>
         <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.8.3" target="_blank" rel="noopener">full notes ↗</a>
       </div>

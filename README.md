@@ -1,13 +1,14 @@
-> Burrow is an independent open-source project built on the same `mo` engine
-> as [mole.fit](https://mole.fit/) (the official Mole for Mac app by `mo`'s author),
-> but it is **not affiliated with or endorsed by mole.fit** — its own name,
-> mark, palette, and copy are original. 
+> Burrow is an independent open-source project. It bundles its own MIT engine —
+> `burrow-engine`, a fork of the [Mole](https://github.com/tw93/Mole) (`mo`) CLI
+> by tw93 — and is **not affiliated with or endorsed by
+> [mole.fit](https://mole.fit/)** (the official Mole for Mac app by `mo`'s
+> author); its own name, mark, palette, and copy are original.
 >
-> If you want it and to fund `mo`'s development — **buy mole.fit ($19)**.
+> If you like Mole and want to fund `mo`'s development — **buy mole.fit ($19)**.
 
 # Burrow
 
-**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — clean, uninstall, optimize, analyze disk, and watch live system status. Plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
+**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Clean, uninstall, optimize, analyze disk, and watch live system status, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
 ![Windows 10/11 — beta](https://img.shields.io/badge/Windows-10%2F11%20·%20beta-blue)
@@ -19,7 +20,7 @@ Mac:
 brew install --cask caezium/tap/burrow
 ```
 
-Windows: download from [releases](https://github.com/caezium/Burrow/releases/latest)
+Windows: download from [releases](https://github.com/caezium/Burrow/releases)
 
 ## Contents
 
@@ -105,7 +106,7 @@ Windows: download from [releases](https://github.com/caezium/Burrow/releases/lat
 
 ## The tools
 
-Burrow wraps the free, open-source Mole engine in a native desktop app: clean
+Burrow wraps a bundled, open-source Mole engine in a native desktop app: clean
 junk, purge dev artifacts, sweep leftover installers, uninstall apps, run safe
 maintenance, map your disk, and watch live system status — in one window. On top
 of that it adds things the CLI doesn't have: a **long-running history** of your
@@ -162,7 +163,7 @@ A live, glanceable read of your Mac's vitals, refreshed continuously:
 | | macOS | Windows |
 |---|---|---|
 | Status | **Stable** — flagship | **Preview** — checked in under `windows/` |
-| Engine | `mo` (Go CLI, via Homebrew) | bundled Mole/PowerShell engine plus Windows fallbacks where needed |
+| Engine | bundled MIT engine (a fork of `mo`, Go CLI); falls back to a system `mo` | bundled Mole/PowerShell engine plus Windows fallbacks where needed |
 | UI | SwiftUI, translucent menu-bar app | WinUI 3 / .NET 8 |
 | Install | `brew install --cask caezium/tap/burrow` | build from source; unsigned preview artifacts via `windows/scripts/build-release.ps1` |
 | Source | [`macos/`](macos/) | [`windows/`](windows/) |
@@ -203,14 +204,13 @@ The full board, with status and voting, lives at **[burrow.henryzh.dev/roadmap](
 
 - Signed & notarized macOS builds — A Developer ID signature so Gatekeeper trusts Burrow without the right-click → Open dance.
 - In-app auto-update — Once builds are signed, silent background update checks with a one-click install (Sparkle).
-- Bundle a pinned `mo` engine in every release — Engine included in the download, so there's no separate install step on any install path. ([#54](https://github.com/caezium/Burrow/issues/54))
 - Windows preview → first stable — Data-loss and supply-chain hardening, parity, and test coverage before it loses the “preview” label. ([#93](https://github.com/caezium/Burrow/issues/93))
 
 **Considering**
 
 - Persistent one-tap “run all” Tune-Up — A saved Smart-Care routine you trigger in one tap from the dashboard. ([#77](https://github.com/caezium/Burrow/issues/77))
 
-_Recently shipped: No-freeze live dashboard, Streaming live status (`mo status --watch`), One-click Update with Homebrew, A warm visual redesign, Ports & Get Online — see the [changelog](https://burrow.henryzh.dev/releases.html)._
+_Recently shipped: Bundled MIT engine — no separate `mo` install, Process inspector + CPU watchdog, Get Online connectivity companion, Security-aware Doctor, No-freeze live dashboard — see the [changelog](https://burrow.henryzh.dev/releases.html)._
 <!-- ROADMAP:END -->
 
 
@@ -258,7 +258,7 @@ Everything is local and takes effect immediately unless noted:
 | **Menu-bar icon** | Show the menu-bar item, or run as a regular Dock app instead. |
 | **MCP / agent access** | Copyable stdio config + the tool list for Claude Code, Cursor, Codex, Cline, and any MCP client. |
 | **Local HTTP query server** | Optional loopback REST endpoints + port for dashboards/curl. On Windows, disabling this keeps the local `/mcp` bridge available for stdio MCP. |
-| **Mole engine** | Shows the installed `mo` version, with a one-click **Update Mole**. |
+| **Mole engine** | Shows the engine version Burrow is running, with a one-click **Update Mole**. |
 
 ## Permissions & Full Disk Access
 
@@ -279,8 +279,10 @@ handles this honestly:
 ### macOS
 
 - **macOS 14+**
-- **The Mole CLI** — `brew install mole`. Hard requirement; Burrow refuses to
-  launch without `mo` on PATH (and offers a guided install if it's missing).
+- **No separate engine install.** Burrow bundles its own MIT engine
+  (`burrow-engine`) and runs it directly. _(Building from source? The engine is
+  staged from a git submodule; if it isn't present, Burrow falls back to a
+  system `mo` — `brew install mole`.)_
 
 ### Windows preview
 
@@ -297,8 +299,7 @@ handles this honestly:
 ### Homebrew (recommended)
 
 ```bash
-brew install mole                        # required engine
-brew install --cask caezium/tap/burrow   # the app (clears quarantine)
+brew install --cask caezium/tap/burrow   # the app + bundled engine (clears quarantine)
 ```
 
 ### Direct download
@@ -353,7 +354,7 @@ unsigned Inno Setup installer, creates a portable ZIP fallback, writes
 
 ## Security & trust
 
-Burrow drives the audited `mo` CLI. The honest privacy picture:
+Burrow drives a bundled, open-source Mole engine (an MIT fork of `mo`). The honest privacy picture:
 
 - **No accounts, no ads.** Your metrics, history, and file contents stay on
   your machine. The macOS app sends opt-out, anonymous usage analytics and crash
@@ -506,7 +507,8 @@ gaps in the Windows Mole branch. See
 [MIT](LICENSE).
 
 - **Mole CLI** (`mo`) is © [tw93](https://github.com/tw93/Mole), MIT. Burrow
-  depends on it at runtime and bundles nothing from it.
+  bundles **`burrow-engine`**, an MIT fork of Mole pinned at its last MIT
+  release, and runs that as its engine.
 - Inspired by the **mole.fit** Mac app (same author as `mo`). Burrow is an
   independent reimplementation with its own brand — no assets, icons, copy, or
   trade dress are taken from mole.fit.
