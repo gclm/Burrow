@@ -103,6 +103,25 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
+      # TEMP diagnostic: the build hangs at SPM "Checking out 9.16.1 of
+      # sentry-cocoa", but ci.yml (no engine step) resolves the same Sentry on
+      # the same Xcode in 90s. This probe disambiguates network vs config:
+      # dumps any leaked global git config, disk, and whether the runner can
+      # actually download the Sentry binary artifact directly. Non-fatal.
+      - name: Diagnose SPM/Sentry resolution (temporary)
+        run: |
+          echo "=== global git config (any leaked url.insteadOf / extraheader?) ==="
+          git config --global --list 2>/dev/null | sed -E 's/(x-access-token:)[^@]*/\1***/g; s/(AUTHORIZATION:).*/\1 ***/g' || echo "(empty)"
+          echo "=== disk free on / ==="
+          df -h / | tail -1
+          echo "=== direct download of the Sentry artifact (curl, 120s bound) ==="
+          time curl -sSL --max-time 120 -o /dev/null \
+            -w "http=%{http_code} size=%{size_download}B time=%{time_total}s\n" \
+            https://github.com/getsentry/sentry-cocoa/releases/download/9.16.1/Sentry.xcframework.zip \
+            || echo "CURL FAILED OR STALLED (runner cannot fetch the artifact)"
+          echo "=== proxy env (CFNetwork/URLSession honor these) ==="
+          env | grep -iE "proxy|GOFLAGS|GOPROXY" || echo "(no proxy env)"
+
       - name: Build (Release)
         id: build
         timeout-minutes: 38
