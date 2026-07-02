@@ -113,9 +113,6 @@ enum Brand {
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .custom(Fonts.mono, size: size).weight(weight)
     }
-    static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(Fonts.ui, size: size).weight(weight)
-    }
     static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .custom(Fonts.ui, size: size).weight(weight)
     }

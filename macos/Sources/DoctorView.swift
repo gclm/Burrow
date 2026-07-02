@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct DoctorView: View {
     let db: DB
@@ -20,8 +21,16 @@ struct DoctorView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(NSLocalizedString("Diagnostics", comment: ""))
-                    .font(Brand.serif(22, .medium)).foregroundStyle(Brand.textPrimary)
+                HStack {
+                    Text(NSLocalizedString("Diagnostics", comment: ""))
+                        .font(Brand.serif(22, .medium)).foregroundStyle(Brand.textPrimary)
+                    Spacer()
+                    Button { copyDiagnostics() } label: {
+                        Label(NSLocalizedString("Copy", comment: ""), systemImage: "doc.on.doc")
+                            .font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .buttonStyle(.plain).disabled(checks.isEmpty)
+                }
 
                 if checks.isEmpty {
                     HStack(spacing: 8) {
@@ -50,7 +59,7 @@ struct DoctorView: View {
         }
         .scrollIndicators(.hidden)
         .fadeEdges()
-        .task { reload() }
+        .task { await reload() }
     }
 
     private func row(_ c: Doctor.Check) -> some View {
@@ -94,7 +103,7 @@ struct DoctorView: View {
         }
     }
 
-    private func reload() {
+    private func reload() async {
         let latest = MetricsStore(db: db).latest()?.status
         var free: Int64 = 0, total: Int64 = 0
         if let d = latest?.disks.max(by: { $0.total < $1.total }) {
@@ -106,12 +115,72 @@ struct DoctorView: View {
         let p = (latest?.memory.pressure ?? "").lowercased()
         let pressure: Doctor.MemoryPressure = p.contains("critical") ? .critical
             : (p.contains("warn") ? .warning : .normal)
+        let fullDiskAccess = Privacy.hasFullDiskAccess()
+        let recentErrorCount = MetricsStore.driftCounters.decodeSkippedTotal
+        // `tmutil latestbackup` and `system_profiler SPNVMeDataType` each spawn a
+        // subprocess and block on waitUntilExit() — system_profiler routinely
+        // takes seconds. Running them inline here (`.task` is MainActor-isolated)
+        // froze the main thread long enough to trip Sentry's ≥2000ms App Hang
+        // detector. Probe off the main thread, then publish on the main actor.
+        let cpuLoad = latest?.cpu.usage
+        let battHealth: Int? = (latest?.batteries?.first?.capacity).flatMap { $0 > 0 ? $0 : nil }
+        let displays = NSScreen.screens.count   // main-actor; reload is @MainActor
+        let probes = await Task.detached(priority: .utility) {
+            (backup: BackupStatus.lastBackupDaysAgo(),
+             smart: DiskHealth.smartVerified(),
+             sip: SecurityPosture.sip(DoctorView.run("/usr/bin/csrutil", ["status"])),
+             gatekeeper: SecurityPosture.gatekeeper(DoctorView.run("/usr/sbin/spctl", ["--status"])),
+             fileVault: SecurityPosture.fileVault(DoctorView.run("/usr/bin/fdesetup", ["status"])),
+             firewall: SecurityPosture.firewall(DoctorView.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"])),
+             volumes: DoctorView.externalVolumeCount(),
+             iface: Connectivity.defaultRoute(fromRouteGet: DoctorView.run("/sbin/route", ["-n", "get", "default"])).interface)
+        }.value
         checks = Doctor.report(.init(
-            fullDiskAccess: Privacy.hasFullDiskAccess(),
+            fullDiskAccess: fullDiskAccess,
             moInstalled: moInstalled, pressure: pressure,
             diskFreeBytes: free, diskTotalBytes: total,
-            recentErrorCount: MetricsStore.driftCounters.decodeSkippedTotal,
-            lastBackupDaysAgo: BackupStatus.lastBackupDaysAgo(),
-            smartVerified: DiskHealth.smartVerified()))
+            recentErrorCount: recentErrorCount,
+            lastBackupDaysAgo: probes.backup,
+            smartVerified: probes.smart,
+            sip: probes.sip, gatekeeper: probes.gatekeeper,
+            fileVault: probes.fileVault, firewall: probes.firewall,
+            batteryHealthPct: battHealth,
+            cpuLoadPercent: cpuLoad,
+            displayCount: displays,
+            externalVolumeCount: probes.volumes,
+            networkInterface: probes.iface))
+    }
+
+    /// Count of mounted non-internal (external/removable) volumes, for the
+    /// Doctor context line. Off-main (FileManager volume reads can touch disk).
+    private static func externalVolumeCount() -> Int {
+        let vols = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: [.volumeIsInternalKey],
+                                                         options: [.skipHiddenVolumes]) ?? []
+        return vols.filter {
+            (try? $0.resourceValues(forKeys: [.volumeIsInternalKey]).volumeIsInternal) == false
+        }.count
+    }
+
+    /// Capture a short system command's stdout (off-main; used for the security
+    /// posture probes). Self-contained so it doesn't depend on the engine seam.
+    private static func run(_ path: String, _ args: [String]) -> String {
+        guard FileManager.default.isExecutableFile(atPath: path) else { return "" }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        do { try p.run() } catch { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func copyDiagnostics() {
+        let text = checks.map { "[\(label($0.level).uppercased())] \($0.name): \($0.detail)" }
+            .joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

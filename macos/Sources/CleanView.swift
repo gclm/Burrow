@@ -44,6 +44,8 @@ struct CleanView: View {
     /// Trash-mode result line, shown as a done banner.
     @State private var trashResult: String?
     @State private var fdaGranted = Privacy.hasFullDiskAccess()
+    /// All-time bytes cleaned (PRD §Clean), loaded off-main for the done screen.
+    @State private var lifetimeCleaned: Int64 = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -99,6 +101,22 @@ struct CleanView: View {
                     .onTapGesture { trashResult = nil }
             }
         }
+    }
+
+    /// Done-screen detail: this run's freed line + the all-time total.
+    private var cleanedDetail: String? {
+        let thisRun = realFlow.report?.summary.map(\.completionLine)
+        let life = lifetimeCleaned > 0
+            ? String(format: NSLocalizedString("Lifetime: %@ cleaned", comment: ""), Fmt.bytes(lifetimeCleaned))
+            : nil
+        let parts = [thisRun, life].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
+    private func loadLifetime() async {
+        lifetimeCleaned = await Task.detached(priority: .utility) {
+            CleanWatch.totals(from: MoleHistory.load()).cleanedBytes
+        }.value
     }
 
     private var dryRunFinished: Bool {
@@ -361,8 +379,8 @@ struct CleanView: View {
             .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 12)
             Rectangle().fill(Brand.hairline).frame(height: 1)
             if case .finished(.done) = realFlow.state {
-                DoneBanner(accent: Tool.clean.accent, title: "Cleaned",
-                           detail: realFlow.report?.summary.map(\.completionLine))
+                DoneBanner(accent: Tool.clean.accent, title: "Cleaned", detail: cleanedDetail)
+                    .task { await loadLifetime() }
             }
             TaskReportView(groups: realFlow.report?.groups ?? [], accent: Tool.clean.accent)
             if case .finished = realFlow.state {

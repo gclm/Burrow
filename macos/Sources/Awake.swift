@@ -48,6 +48,7 @@ final class Awake: ObservableObject {
 
     private var displayAssertion: IOPMAssertionID = 0
     private var systemAssertion: IOPMAssertionID = 0
+    private var lidAssertion: IOPMAssertionID = 0
     private var expiryTimer: Timer?
 
     private init() {}
@@ -61,6 +62,13 @@ final class Awake: ObservableObject {
         ok = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
                                          IOPMAssertionLevel(kIOPMAssertionLevelOn),
                                          reason, &systemAssertion) == kIOReturnSuccess && ok
+        // Opt-in (PRD §Everyday): also prevent system sleep so a backup/render
+        // survives a closed lid. Default off — it changes power behaviour.
+        if Store.keepAwakeLidClosed {
+            _ = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventSystemSleep as CFString,
+                                            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                            reason, &lidAssertion)
+        }
         isActive = ok
         if let secs = duration.seconds {
             expiresAt = Date().addingTimeInterval(secs)
@@ -75,6 +83,7 @@ final class Awake: ObservableObject {
     func stop() {
         if displayAssertion != 0 { IOPMAssertionRelease(displayAssertion); displayAssertion = 0 }
         if systemAssertion != 0 { IOPMAssertionRelease(systemAssertion); systemAssertion = 0 }
+        if lidAssertion != 0 { IOPMAssertionRelease(lidAssertion); lidAssertion = 0 }
         expiryTimer?.invalidate()
         expiryTimer = nil
         isActive = false

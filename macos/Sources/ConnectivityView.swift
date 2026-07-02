@@ -14,6 +14,7 @@
 
 import SwiftUI
 import AppKit
+import CoreWLAN
 
 struct ConnectivityView: View {
     var isActive: Bool = true
@@ -24,6 +25,19 @@ struct ConnectivityView: View {
     @State private var loaded = false
     @State private var actionBusy: Connectivity.Fix?
     @State private var actionResult: String?
+    /// Venue-specific captive-portal tips when the SSID is recognised (PRD §β).
+    @State private var venue: VenueMatcher.Venue?
+    /// On-demand nearby-Wi-Fi scan (PRD §β Home mode): strongest networks +
+    /// congested channels. User-initiated — a scan briefly disrupts the link.
+    @State private var nearby: [NearbyNetworks.Net] = []
+    @State private var scanning = false
+    @State private var scanned = false
+    /// On-demand throughput + latency test (PRD §β). User-initiated — it
+    /// transfers data to/from Cloudflare's public speed endpoint.
+    @State private var speed: SpeedTest.Result?
+    @State private var speedTesting = false
+    /// Persisted log of recent attempts (PRD §β).
+    @State private var history: [ConnectionHistory.Entry] = []
 
     private var accent: Color { Tool.status.accent }
 
@@ -31,18 +45,25 @@ struct ConnectivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                if let venue { venueCard(venue) }
                 actionsCard
                 ForEach(checks) { checkRow($0) }
                 if loaded, checks.isEmpty {
                     Text(NSLocalizedString("Couldn't run the checks.", comment: ""))
                         .font(Brand.sans(13)).foregroundStyle(Brand.textSecondary)
                 }
+                speedCard
+                nearbyCard
+                historyCard
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
-        .onAppear { if isActive, !loaded { reload() } }
+        .onAppear {
+            if history.isEmpty { history = ConnectionHistory.load() }
+            if isActive, !loaded { reload() }
+        }
         .onChange(of: isActive) { _, now in if now, !loaded { reload() } }
     }
 
@@ -118,6 +139,224 @@ struct ConnectivityView: View {
         }
     }
 
+    /// Venue-specific captive-portal tips when the SSID is recognised (PRD §β).
+    private func venueCard(_ v: VenueMatcher.Venue) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: v.name, glyph: "mappin.and.ellipse", color: accent)
+                ForEach(Array(v.tips.enumerated()), id: \.offset) { _, tip in
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: "lightbulb")
+                            .font(.system(size: 11)).foregroundStyle(accent)
+                        Text(tip).font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Current Wi-Fi SSID. nil when not on Wi-Fi, or when Location access (which
+    /// macOS now gates the SSID behind) hasn't been granted — the venue card just
+    /// stays hidden. Off-main: CoreWLAN reads can block.
+    private static func currentSSID() -> String? {
+        CWWiFiClient.shared().interface()?.ssid()
+    }
+
+    /// Nearby-Wi-Fi card (PRD §β Home mode): strongest networks with their
+    /// channel, plus a "busy ch" marker for congested channels.
+    private var nearbyCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Eyebrow(text: "Nearby Wi-Fi", glyph: "dot.radiowaves.left.and.right", color: accent)
+                    Spacer()
+                    if scanning {
+                        ProgressView().controlSize(.small).tint(accent)
+                    } else {
+                        Button(scanned ? NSLocalizedString("Rescan", comment: "")
+                                       : NSLocalizedString("Scan", comment: "")) { scanNearby() }
+                            .buttonStyle(.plain).font(Brand.sans(11, .semibold)).foregroundStyle(accent)
+                    }
+                }
+                if !nearby.isEmpty {
+                    let congested = NearbyNetworks.congestedChannels(nearby)
+                    let strongest = Array(NearbyNetworks.byStrength(nearby).prefix(8))
+                    ForEach(Array(strongest.enumerated()), id: \.offset) { _, n in
+                        HStack(spacing: 8) {
+                            Image(systemName: n.security == "Open" ? "lock.open" : "lock")
+                                .font(.system(size: 9)).foregroundStyle(Brand.textTertiary)
+                            Text(n.ssid).font(Brand.sans(12)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                            Spacer(minLength: 8)
+                            if congested.contains(n.channel) {
+                                Text(NSLocalizedString("busy", comment: ""))
+                                    .font(Brand.mono(9)).foregroundStyle(Brand.amber)
+                            }
+                            Text(verbatim: "ch \(n.channel)").font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
+                            Text(verbatim: "\(n.rssi) dBm").font(Brand.mono(10))
+                                .foregroundStyle(Brand.textSecondary).frame(width: 64, alignment: .trailing)
+                        }
+                    }
+                } else if scanned, !scanning {
+                    Text(NSLocalizedString("No networks found — scanning needs Location access (System Settings ▸ Privacy & Security ▸ Location).", comment: ""))
+                        .font(Brand.mono(10)).foregroundStyle(Brand.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !scanned {
+                    Text(NSLocalizedString("See which channels are crowded near you.", comment: ""))
+                        .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                }
+            }
+        }
+    }
+
+    /// Speed-test card (PRD §β): throughput + latency, on demand.
+    private var speedCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Eyebrow(text: "Speed Test", glyph: "speedometer", color: accent)
+                    Spacer()
+                    if speedTesting {
+                        ProgressView().controlSize(.small).tint(accent)
+                    } else {
+                        Button(speed == nil ? NSLocalizedString("Test", comment: "")
+                                            : NSLocalizedString("Retest", comment: "")) { runSpeedTest() }
+                            .buttonStyle(.plain).font(Brand.sans(11, .semibold)).foregroundStyle(accent)
+                    }
+                }
+                if let speed {
+                    HStack(spacing: 20) {
+                        metric(String(format: "%.0f", speed.mbps), NSLocalizedString("Mbps down", comment: ""))
+                        metric(String(format: "%.0f ms", speed.jitterMs), NSLocalizedString("jitter", comment: ""))
+                        metric(String(format: "%.0f%%", speed.lossPercent), NSLocalizedString("loss", comment: ""))
+                    }
+                } else if speedTesting {
+                    Text(NSLocalizedString("Measuring…", comment: ""))
+                        .font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
+                } else {
+                    Text(NSLocalizedString("Measures download throughput and latency against Cloudflare.", comment: ""))
+                        .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func metric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(Brand.mono(16, .medium)).foregroundStyle(Brand.textPrimary)
+            Text(label).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+        }
+    }
+
+    private func runSpeedTest() {
+        speedTesting = true
+        Task.detached(priority: .userInitiated) {
+            let r = await ConnectivityView.measureSpeed()
+            await MainActor.run {
+                speed = r
+                speedTesting = false
+            }
+        }
+    }
+
+    /// Throughput from a few timed downloads (per-second byte rates) + latency
+    /// from a few small-payload round trips, aggregated by the tested SpeedTest
+    /// module. Cloudflare's `__down` endpoint is public + CORS-open. nil on
+    /// total failure (offline) → the card keeps its idle copy.
+    private static func measureSpeed() async -> SpeedTest.Result? {
+        let down = URL(string: "https://speed.cloudflare.com/__down?bytes=8000000")!
+        let ping = URL(string: "https://speed.cloudflare.com/__down?bytes=1")!
+        var rates: [Int64] = []
+        for _ in 0..<3 {
+            let start = Date()
+            guard let (data, _) = try? await URLSession.shared.data(from: down) else { continue }
+            let elapsed = Date().timeIntervalSince(start)
+            guard elapsed > 0 else { continue }
+            rates.append(Int64(Double(data.count) / elapsed))   // bytes per second
+        }
+        var lats: [Double?] = []
+        for _ in 0..<5 {
+            let start = Date()
+            if (try? await URLSession.shared.data(from: ping)) != nil {
+                lats.append(Date().timeIntervalSince(start) * 1000)
+            } else {
+                lats.append(nil)
+            }
+        }
+        guard !rates.isEmpty else { return nil }
+        return SpeedTest.aggregate(byteSamples: rates, latenciesMs: lats)
+    }
+
+    /// Recent-attempts log (PRD §β): the last few Get-Online checks with their
+    /// network and classified outcome.
+    @ViewBuilder private var historyCard: some View {
+        if !history.isEmpty {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Eyebrow(text: "Recent", glyph: "clock.arrow.circlepath", color: accent)
+                    ForEach(Array(history.prefix(5).enumerated()), id: \.offset) { _, h in
+                        HStack(spacing: 8) {
+                            Circle().fill(Self.reasonColor(h.reason)).frame(width: 6, height: 6)
+                            Text(h.ssid ?? NSLocalizedString("Wi-Fi", comment: ""))
+                                .font(Brand.sans(12)).foregroundStyle(Brand.textPrimary).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(Self.reasonLabel(h.reason)).font(Brand.mono(10)).foregroundStyle(Brand.textSecondary)
+                            Text(Self.relative(h.at)).font(Brand.mono(9))
+                                .foregroundStyle(Brand.textTertiary).frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static func reasonLabel(_ r: String) -> String {
+        switch r {
+        case "ok":              return NSLocalizedString("online", comment: "")
+        case "captivePortal":   return NSLocalizedString("portal", comment: "")
+        case "loginUnreachable": return NSLocalizedString("login down", comment: "")
+        default:                return NSLocalizedString("offline", comment: "")
+        }
+    }
+    private static func reasonColor(_ r: String) -> Color {
+        switch r {
+        case "ok":            return Brand.green
+        case "captivePortal": return Brand.amber
+        default:              return Brand.red
+        }
+    }
+    private static func relative(_ d: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f.localizedString(for: d, relativeTo: Date())
+    }
+
+    private func scanNearby() {
+        scanning = true
+        Task.detached(priority: .utility) {
+            let nets = ConnectivityView.scanNearbyNetworks()
+            await MainActor.run {
+                nearby = nets
+                scanning = false
+                scanned = true
+            }
+        }
+    }
+
+    /// Active scan via CoreWLAN. Throws/empty without Location access or off
+    /// Wi-Fi → the card shows the permission hint. A scan briefly disrupts the
+    /// link, so it's only ever user-initiated.
+    private static func scanNearbyNetworks() -> [NearbyNetworks.Net] {
+        guard let iface = CWWiFiClient.shared().interface() else { return [] }
+        let nets = (try? iface.scanForNetworks(withSSID: nil)) ?? []
+        return nets.compactMap { n in
+            guard let ssid = n.ssid, !ssid.isEmpty else { return nil }
+            return NearbyNetworks.Net(ssid: ssid, rssi: n.rssiValue,
+                                      channel: n.wlanChannel?.channelNumber ?? 0,
+                                      security: n.supportsSecurity(.none) ? "Open" : "Secured")
+        }
+    }
+
     private func checkRow(_ c: Connectivity.Check) -> some View {
         GlassCard {
             HStack(alignment: .top, spacing: 12) {
@@ -179,6 +418,19 @@ struct ConnectivityView: View {
             iface = result.interface
             loading = false
             loaded = true
+            // Venue + history both need the SSID — read it once, off-main.
+            let ssid = await Task.detached(priority: .utility) { ConnectivityView.currentSSID() }.value
+            venue = ssid.flatMap { VenueMatcher.match(ssid: $0) }
+            let online = result.checks.contains { $0.id == "internet" && $0.status == .ok }
+            let portal = result.checks.contains { $0.id == "portal" }
+            let reason = ConnectionFailureClassifier.classify(online: online, portal: portal, loginReachable: portal)
+            // record() reads + rewrites the UserDefaults JSON log — keep it off
+            // the main actor, like the SSID read above.
+            let reasonRaw = reason.rawValue
+            let at = Date()
+            history = await Task.detached(priority: .utility) {
+                ConnectionHistory.record(ssid: ssid, reason: reasonRaw, at: at)
+            }.value
         }
     }
 }

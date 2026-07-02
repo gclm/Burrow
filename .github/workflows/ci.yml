@@ -38,6 +38,12 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
+      # Sentry is a vendored local framework (not SPM — its binary download
+      # hangs xcodebuild). Fetch it before generating the project, or xcodegen
+      # references a missing framework. (Job working-directory is macos/.)
+      - name: Fetch vendored Sentry framework
+        run: bash ../scripts/fetch-sentry.sh
+
       - name: Generate project
         run: xcodegen generate
 

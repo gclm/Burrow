@@ -25,12 +25,13 @@
 
 import AppKit
 import SwiftUI
+import Darwin   // sysctlbyname — native memory-pressure level
 
 // MARK: - Model
 
 /// A metric that can be surfaced in the menu bar.
 enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
-    case cpu, memory, gpu, diskUsage, network, diskIO, fan, temperature, battery
+    case cpu, memory, gpu, diskUsage, network, diskIO, fan, temperature, battery, power
 
     var id: String { rawValue }
 
@@ -46,6 +47,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return "FAN"
         case .temperature: return "TEMP"
         case .battery:     return "BAT"
+        case .power:       return "PWR"
         }
     }
 
@@ -61,6 +63,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return NSLocalizedString("Fan speed", comment: "")
         case .temperature: return NSLocalizedString("Temperature", comment: "")
         case .battery:     return NSLocalizedString("Battery", comment: "")
+        case .power:       return NSLocalizedString("Power draw", comment: "")
         }
     }
 
@@ -76,6 +79,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .fan:         return "fanblades"
         case .temperature: return "thermometer.medium"
         case .battery:     return "battery.100"
+        case .power:       return "bolt.fill"
         }
     }
 
@@ -83,9 +87,22 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
     var isPercentage: Bool {
         switch self {
         case .cpu, .memory, .gpu, .diskUsage, .battery: return true
-        case .network, .diskIO, .fan, .temperature:     return false
+        case .network, .diskIO, .fan, .temperature, .power: return false
         }
     }
+
+    /// Colour modes offered for this metric. "By pressure" reads macOS memory
+    /// pressure, so it's only meaningful for `.memory` — don't offer it
+    /// elsewhere (it would silently fall back to "By utilization").
+    var colorModes: [MenuBarColorMode] {
+        self == .memory ? MenuBarColorMode.allCases
+                        : MenuBarColorMode.allCases.filter { $0 != .pressure }
+    }
+
+    /// Default colour mode for a fresh widget of this metric. Memory defaults to
+    /// "By pressure" (raw % is misleading on macOS — it counts cache); the rest
+    /// use the value-driven utilization ramp.
+    var defaultColor: MenuBarColorMode { self == .memory ? .pressure : .utilization }
 
     /// Two-channel metrics (down/up, read/write) — eligible for the speed style.
     var isDual: Bool { self == .network || self == .diskIO }
@@ -98,6 +115,7 @@ enum MenuBarMetric: String, Codable, CaseIterable, Identifiable {
         case .network, .diskIO:       return [.value, .labeled, .speed, .sparkline]
         case .fan, .temperature:      return [.value, .labeled]
         case .battery:                return [.value, .labeled, .bar, .battery]
+        case .power:                  return [.value, .labeled, .sparkline]
         }
     }
 
@@ -251,7 +269,7 @@ struct MenuBarItem: Codable, Equatable, Identifiable {
     /// user switches the menu bar to `.metrics` (default is the icon).
     static let defaults: [MenuBarItem] = [
         MenuBarItem(metric: .cpu, style: .value),
-        MenuBarItem(metric: .memory, style: .value),
+        MenuBarItem(metric: .memory, style: .value, color: .pressure),
     ]
 }
 
@@ -268,8 +286,43 @@ struct MenuBarMetricValues {
     /// Sparkline series (oldest→newest), already downsampled by the controller.
     var histories: [MenuBarMetric: [Double]] = [:]
     var batteryCharging = false
+    /// Current macOS memory-pressure level (`kern.memorystatus_vm_pressure_level`):
+    /// 1 = normal, 2 = warning, 4 = critical. Drives the "By pressure" colour.
+    var memoryPressurePercent: Int = 0
+}
 
-    func has(_ m: MenuBarMetric) -> Bool { primary[m] != nil }
+/// Memory pressure as a percentage + colour, matching Activity Monitor / iStat
+/// Menus: the share of physical RAM that is "hard" — wired (unpageable) plus
+/// compressed — over total. The kernel's own `kern.memorystatus_vm_pressure_level`
+/// is only a jumpy 3-level enum with no number, and mo's snapshot pressure string
+/// is empty on Apple Silicon, so neither gives an accurate figure on its own.
+enum MemoryPressure {
+    /// `(wired + compressed) / total` via `host_statistics64` — the same number
+    /// iStat Menus reports as "Pressure" (e.g. ~53%).
+    static func percent() -> Int {
+        var size = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
+        var stats = vm_statistics64_data_t()
+        let kr = withUnsafeMutablePointer(to: &stats) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &size)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        let hard = (Double(stats.wire_count) + Double(stats.compressor_page_count)) * Double(vm_page_size)
+        var total: UInt64 = 0; var tSize = MemoryLayout<UInt64>.size
+        guard sysctlbyname("hw.memsize", &total, &tSize, nil, 0) == 0, total > 0 else { return 0 }
+        return min(100, max(0, Int((hard / Double(total) * 100).rounded())))
+    }
+
+    /// Tuned so normal operation (wired + light compression, ~40–55%) stays
+    /// green: green ≤ 59 · orange 60–79 · red ≥ 80.
+    static func tint(percent: Int) -> Color {
+        switch percent {
+        case 80...: return Brand.red
+        case 60...: return Brand.orange
+        default:    return Brand.green
+        }
+    }
 }
 
 // MARK: - Renderer
@@ -321,6 +374,13 @@ enum MenuBarRenderer {
         }
     }
 
+    /// "By pressure" colour — the discrete macOS memory-pressure level (not a
+    /// percentage): normal → green, warning → orange, critical → red, matching
+    /// Activity Monitor's Memory Pressure graph.
+    private static func pressureColor(_ percent: Int) -> NSColor {
+        NSColor(MemoryPressure.tint(percent: percent))
+    }
+
     /// Battery is inverse: low charge is the alarming end.
     private static func batteryColor(_ pct: Double, charging: Bool) -> NSColor {
         if charging { return NSColor(Brand.green) }
@@ -331,13 +391,33 @@ enum MenuBarRenderer {
         }
     }
 
+    /// Temperature ramp (°C), so a temp widget actually warns when hot instead
+    /// of sitting flat blue. Tuned for Mac CPU/GPU package temps (idle ~40,
+    /// sustained load ~80, throttle ~100): cool → green, warm → gold, hot →
+    /// orange, very hot → red.
+    private static func temperatureColor(_ celsius: Double) -> NSColor {
+        switch celsius {
+        case 95...:   return NSColor(Brand.red)
+        case 85..<95: return NSColor(Brand.orange)
+        case 70..<85: return NSColor(Brand.gold)
+        default:      return NSColor(Brand.green)
+        }
+    }
+
     static func color(for item: MenuBarItem, value: Double, values: MenuBarMetricValues) -> NSColor {
         if let fixed = item.color.fixedColor { return fixed }   // named colours
         switch item.color {
         case .mono:    return .labelColor
         case .accent:  return NSColor(Brand.blue)
-        case .pressure, .utilization:
+        case .pressure:
+            // "By pressure" = the real macOS memory-pressure level, not a load
+            // percentage. Only memory carries a pressure signal; other metrics
+            // fall back to value-driven colouring.
+            if item.metric == .memory { return pressureColor(values.memoryPressurePercent) }
+            fallthrough
+        case .utilization:
             if item.metric == .battery { return batteryColor(value, charging: values.batteryCharging) }
+            if item.metric == .temperature { return temperatureColor(value) }
             if item.metric.isPercentage { return utilization(value) }
             return NSColor(Brand.blue)
         default:       return .labelColor   // unreachable: named modes handled above
@@ -366,6 +446,8 @@ enum MenuBarRenderer {
             return v > 0 ? "\(Int(v.rounded()))" : "—"
         case .temperature:
             return "\(Int(v.rounded()))°"
+        case .power:
+            return "\(Int(v.rounded()))W"
         case .network, .diskIO:
             return rate(v + (values.secondary[m] ?? 0))
         }

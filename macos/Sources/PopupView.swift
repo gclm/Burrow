@@ -14,6 +14,24 @@
 import SwiftUI
 import AppKit
 
+/// Re-renders `content` only when `key` changes — lets a heavy, snapshot-driven
+/// block (the metric grid) skip rebuilding when an unrelated @Published on the
+/// popover ticks (ops, Stay-Awake, clean-watch, privacy). Pair with `.equatable()`.
+private struct EquatableGate<Key: Equatable, Content: View>: View, Equatable {
+    let key: Key
+    @ViewBuilder var content: () -> Content
+    var body: some View { content() }
+    static func == (lhs: EquatableGate, rhs: EquatableGate) -> Bool { lhs.key == rhs.key }
+}
+
+/// Everything the popover metric grid depends on; unchanged ⇒ the grid (6 tiles
+/// + charts) is not rebuilt. Relies on `MoleStatus: Equatable`.
+private struct MetricGridKey: Equatable {
+    let snap: MoleStatus
+    let cpu, gpu, mem, net, fan: [Double]
+    let tiles: Set<MenuBarMetric>
+}
+
 struct PopupView: View {
     @StateObject private var model: HUDModel
     @ObservedObject private var ops = OperationCenter.shared
@@ -42,7 +60,14 @@ struct PopupView: View {
             }
             if sections.contains(.activity), ops.hasActivity { activitySection }
             if let s = model.snap {
-                if sections.contains(.metrics) { metricGrid(s) }
+                if sections.contains(.metrics) {
+                    EquatableGate(key: MetricGridKey(snap: s, cpu: model.cpuHist, gpu: model.gpuHist,
+                                                     mem: model.memHist, net: model.netHist,
+                                                     fan: model.fanHist, tiles: Store.popupTiles)) {
+                        metricGrid(s)
+                    }
+                    .equatable()
+                }
                 if sections.contains(.battery) { batteryCard(s) }
                 if sections.contains(.processes) { topProcesses(s) }
             } else {
@@ -260,7 +285,7 @@ struct PopupView: View {
                           footnote: (s.gpu?.first?.name ?? "GPU").replacingOccurrences(of: "Apple ", with: ""))
             }
             if tiles.contains(.memory) {
-                ValueTile(variant: .hud, eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
+                ValueTile(variant: .hud, eyebrow: "Memory", glyph: "memorychip", accent: MemoryPressure.tint(percent: MemoryPressure.percent()),
                           value: String(format: "%.0f", s.memory.usedPercent), unit: "%",
                           chip: memChip(s),
                           values: model.memHist, chartStyle: .area,
@@ -338,10 +363,8 @@ struct PopupView: View {
     }
 
     private func memChip(_ s: MoleStatus) -> (String, Color)? {
-        let label = s.memory.pressure.isEmpty ? "" : s.memory.pressure.lowercased()
-        guard !label.isEmpty else { return nil }
-        let color: Color = label == "normal" ? Brand.textSecondary : (label == "warning" ? Brand.orange : Brand.red)
-        return (label, color)
+        let p = MemoryPressure.percent()
+        return (String(format: NSLocalizedString("%d%%", comment: ""), p), MemoryPressure.tint(percent: p))
     }
 
     private func netValue(_ s: MoleStatus) -> (String, String) {
@@ -648,6 +671,14 @@ final class HUDModel: ObservableObject {
     func subscribeSnapshot() async {
         for await v in feeds.liveSnapshot(live).subscribeValues() {
             snap = v.snap
+            // Live 1 s sparklines for the cpu/mem/gpu tiles — appended each tick
+            // so the popover charts actually move (the 15 s pump now only feeds
+            // net/fan + top-drain). Capped to the largest history window.
+            if let s = v.snap {
+                appendHist(&cpuHist, s.cpu.usage)
+                appendHist(&memHist, s.memory.usedPercent)
+                if let g = s.gpu?.first, g.usage >= 0 { appendHist(&gpuHist, g.usage) }
+            }
             if let when = v.sampledAt {
                 freshness = String(format: NSLocalizedString("%ds ago", comment: ""), Int(Date().timeIntervalSince(when)))
             } else {
@@ -659,9 +690,16 @@ final class HUDModel: ObservableObject {
     /// Sparklines + top drain, off the 15 s `metrics.sparklines.30m` pump.
     func subscribeSparklines() async {
         for await v in feeds.metricSparklines(db: db).subscribeValues() {
-            cpuHist = v.cpu; memHist = v.mem; netHist = v.net; gpuHist = v.gpu; fanHist = v.fan
+            netHist = v.net; fanHist = v.fan
             topDrain = v.topDrain
         }
+    }
+
+    private func appendHist(_ ring: inout [Double], _ value: Double) {
+        ring.append(value)
+        // ~1 min of 1 s samples — enough recent trend to read at a glance
+        // without cramming the small popover chart.
+        if ring.count > 60 { ring.removeFirst(ring.count - 60) }
     }
 
     /// Clean Watch lifetime totals, off the daily `history.cleanwatch`

@@ -70,6 +70,15 @@ enum ProcessActions {
     /// SIGKILL — the hammer. Caller double-confirms first.
     @discardableResult
     static func forceKill(pid: Int) -> Bool { kill(Int32(pid), SIGKILL) == 0 }
+
+    /// SIGSTOP — pause a process (freeze it without killing). Reversible via
+    /// `resume`; own-user processes only (PRD §α Process Inspector).
+    @discardableResult
+    static func suspend(pid: Int) -> Bool { kill(Int32(pid), SIGSTOP) == 0 }
+
+    /// SIGCONT — resume a previously suspended process.
+    @discardableResult
+    static func resume(pid: Int) -> Bool { kill(Int32(pid), SIGCONT) == 0 }
 }
 
 /// The full live process list for the Status table. `mo status --json`

@@ -50,3 +50,9 @@ scripts/release.env
 
 # local build output (this session's DerivedData)
 build_dd/
+
+# Vendored Sentry framework — fetched by scripts/fetch-sentry.sh, not committed.
+# Sentry is a local framework, not an SPM package (SPM's binary-artifact
+# download hangs xcodebuild on CI; see that script).
+macos/vendor/Sentry.xcframework/
+macos/vendor/.sentry-*.ok

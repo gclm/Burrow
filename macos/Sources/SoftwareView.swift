@@ -331,8 +331,12 @@ struct AppRow: View {
             .padding(10)
         } else if let preview, !preview.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                // Header: name + mono bundle path · k/n selected · select all
+                // Header: name + mono bundle path · k/n selected · clear-data · select all
                 HStack {
+                    // "Clear Data" = every leftover except the .app bundle. Shown only
+                    // when there's a bundle to exclude, so it's always a true subset
+                    // (kept app, removed data) routed through the native-trash path.
+                    let dataPaths = UninstallPlan.dataOnly(paths: preview.entries.map(\.path))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(app.name).font(Brand.sans(12, .semibold)).foregroundStyle(Brand.textPrimary)
                         Text(prettyPath).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
@@ -341,6 +345,13 @@ struct AppRow: View {
                     Spacer()
                     Text(verbatim: "\(pathSelection.count)/\(preview.entries.count) selected")
                         .font(Brand.mono(10)).foregroundStyle(Brand.textSecondary)
+                    if dataPaths.count < preview.entries.count {
+                        Button(NSLocalizedString("Clear Data", comment: "")) {
+                            pathSelection = Set(dataPaths)
+                        }
+                        .buttonStyle(.plain).font(Brand.sans(10, .semibold)).foregroundStyle(Tool.apps.accent)
+                        .help(NSLocalizedString("Select everything except the app itself — removes its data but keeps the app installed.", comment: ""))
+                    }
                     Button(NSLocalizedString("Select all", comment: "")) {
                         pathSelection = Set(preview.entries.map(\.path))
                     }
@@ -420,6 +431,11 @@ struct AppRow: View {
                 .frame(width: 96, alignment: .leading)
             Text(entry.path).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
                 .lineLimit(1).truncationMode(.middle)
+            if UninstallPlan.isInputMethod(entry.path) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9)).foregroundStyle(Brand.gold)
+                    .help(NSLocalizedString("Input method — removing this can disable typing for its language until you log out.", comment: ""))
+            }
             Spacer()
             Button { AnalyzeIcons.reveal(entry.expandedPath) } label: {
                 Image(systemName: "magnifyingglass.circle").font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
@@ -526,17 +542,33 @@ final class SoftwareModel: ObservableObject {
     /// (`u_isUAlphabetic`, `icu::CharString::append`) per app per keystroke
     /// over a 100+ app list hung the main thread (Sentry App Hang). Folding
     /// once up front turns each keystroke into a plain substring scan.
+    /// `loweredNames` stays name-only for the Name sort; `loweredSearch` is the
+    /// name + bundle id + uninstall name haystack for alias-aware filtering —
+    /// folding those two extra fields per keystroke instead brought the App
+    /// Hang straight back.
     private var loweredNames: [String: String] = [:]
+    private var loweredSearch: [String: String] = [:]
 
     private func rebuildLoweredNames() {
-        var map = [String: String](minimumCapacity: apps.count)
-        for a in apps { map[a.id] = a.name.lowercased() }
-        loweredNames = map
+        var names = [String: String](minimumCapacity: apps.count)
+        var search = [String: String](minimumCapacity: apps.count)
+        for a in apps {
+            let name = a.name.lowercased()
+            names[a.id] = name
+            search[a.id] = "\(name) \(a.bundleId.lowercased()) \(a.uninstallName.lowercased())"
+        }
+        loweredNames = names
+        loweredSearch = search
     }
 
     var filtered: [InstalledApp] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        let base = q.isEmpty ? apps : apps.filter { (loweredNames[$0.id] ?? $0.name.lowercased()).contains(q) }
+        // Alias-aware (name + bundle id + uninstall name, PRD §Uninstall), but
+        // matched against the haystack pre-folded once per load — so a keystroke
+        // is one substring scan per app, not three ICU foldings.
+        let base = q.isEmpty ? apps : apps.filter {
+            (loweredSearch[$0.id] ?? $0.name.lowercased()).contains(q)
+        }
         let sorted: [InstalledApp]
         switch sort {
         case .size:   sorted = base.sorted { $0.sizeBytes > $1.sizeBytes }
@@ -869,7 +901,7 @@ final class StartupModel: ObservableObject {
     func reload() {
         loading = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let scanned = StartupInventory.scanLive()
+            let scanned = StartupInventory.scanLiveIncludingLoginItems()
             let disabled = StartupControl.disabledLabels()
             Task { @MainActor in
                 self?.items = scanned

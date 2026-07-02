@@ -33,9 +33,13 @@ packages:
   PostHog:
     url: https://github.com/PostHog/posthog-ios
     exactVersion: 3.59.3
-  Sentry:
-    url: https://github.com/getsentry/sentry-cocoa
-    exactVersion: 9.16.1
+# Sentry is NOT an SPM package: SPM eagerly downloads ALL of sentry-cocoa's
+# binary xcframework variants during resolution (Sentry, -Dynamic, -WithARM64e,
+# …, ~500 MB), and on the release runner that download hard-hangs xcodebuild
+# (curl pulls the same artifact in <1s — it's an SPM-downloader problem). So we
+# vendor only the one static Sentry.xcframework we actually use, fetched by
+# scripts/fetch-sentry.sh (curl), and link it directly. Pin matches the old SPM
+# exactVersion. Crash reporting (CrashReporter.swift) is unchanged.
 
 targets:
   Burrow:
@@ -50,8 +54,8 @@ targets:
       properties:
         LSUIElement: true   # menu-bar agent, no Dock icon
         CFBundleDisplayName: Burrow
-        CFBundleShortVersionString: "0.8.0"
-        CFBundleVersion: "11"
+        CFBundleShortVersionString: "0.9.1"
+        CFBundleVersion: "16"
         NSHumanReadableCopyright: "MIT License. Mole CLI © tw93. Independent, not affiliated with mole.fit."
         # Friendly, one-time prompts for the standard folders Mole scans
         # (purge/installer touch these). Full Disk Access still covers the
@@ -84,7 +88,33 @@ targets:
         SENTRY_DSN: ""
     dependencies:
       - package: PostHog
-      - package: Sentry
+      - framework: vendor/Sentry.xcframework
+        embed: false
+    postBuildScripts:
+      - name: Bundle burrow-engine (MIT)
+        basedOnDependencyAnalysis: false
+        script: |
+          # Stage the MIT engine into the app's Resources so users run our engine with zero
+          # install (never upstream GPL mo). Activates when the engine source is present —
+          # a release/CI vendors it (vendor/burrow-engine) or sets BURROW_ENGINE_SRC; dev
+          # builds without it fall back to a system-installed engine.
+          #
+          # NOTE: Xcode's CodeSign phase runs AFTER all build phases, so it re-signs the app
+          # over the freshly-added engine and the resource seal ends up stale. The final seal
+          # therefore happens POST-build: use scripts/build.sh locally, and the release
+          # pipeline's inside-out re-sign (#178) seals it for distribution.
+          ENGINE_SRC="${BURROW_ENGINE_SRC:-$SRCROOT/vendor/burrow-engine}"
+          # Require a real engine checkout, not just the directory: a plain
+          # (no-submodule) checkout — e.g. the PR `ci` job — leaves an EMPTY
+          # vendor/burrow-engine dir for the gitlink, so `[ -d ]` alone would be
+          # true and bundle-engine.sh would then fail building from missing
+          # source. Gate on mole + cmd/ so we bundle only a populated checkout
+          # and otherwise fall through to the system engine (build still green).
+          if [ -f "$ENGINE_SRC/mole" ] && [ -d "$ENGINE_SRC/cmd" ]; then
+            "$SRCROOT/scripts/bundle-engine.sh" "$ENGINE_SRC" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          else
+            echo "warning: burrow-engine source not present at $ENGINE_SRC — Burrow falls back to a system engine. Set BURROW_ENGINE_SRC or init the vendor/burrow-engine submodule."
+          fi
 
   BurrowTests:
     type: bundle.unit-test

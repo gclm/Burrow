@@ -1,44 +1,33 @@
-> Burrow is an independent open-source project built on the same `mo` engine
-> as [mole.fit](https://mole.fit/) (the official Mole for Mac app by `mo`'s author),
-> but it is **not affiliated with or endorsed by mole.fit** — its own name,
-> mark, palette, and copy are original. 
+> Burrow is an independent open-source project. It bundles its own MIT engine —
+> `burrow-engine`, a fork of the [Mole](https://github.com/tw93/Mole) (`mo`) CLI
+> by tw93 — and is **not affiliated with or endorsed by
+> [mole.fit](https://mole.fit/)** (the official Mole for Mac app by `mo`'s
+> author); its own name, mark, palette, and copy are original.
 >
-> If you want it and to fund `mo`'s development — **buy mole.fit ($19)**.
+> If you like Mole and want to fund `mo`'s development — **buy mole.fit ($19)**.
 
 # Burrow
 
-**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — clean, uninstall, optimize, analyze disk, and watch live system status. Plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
+**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Clean, uninstall, optimize, analyze disk, and watch live system status, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
 ![Windows 10/11 — beta](https://img.shields.io/badge/Windows-10%2F11%20·%20beta-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue)
 
-Burrow wraps the free, open-source Mole engine in a native desktop app: clean
-junk, purge dev artifacts, sweep leftover installers, uninstall apps, run safe
-maintenance, map your disk, and watch live system status — in one window. On top
-of that it adds things the CLI doesn't have: a **long-running history** of your
-machine's metrics in a local store and an **MCP server** so any AI agent (Claude
-Code, Cursor, Codex…) can ask "what's been happening on this machine."
 
-**macOS** is the mature flagship. **Windows** currently has a native WinUI 3 /
-.NET 8 preview app, Windows telemetry/history, tray HUD, loopback HTTP, MCP
-stdio bridge, CI, tests, and unsigned release packaging.
+Mac:
+```sh
+brew install --cask caezium/tap/burrow
+```
 
-`brew install --cask caezium/tap/burrow`  ·  Windows: [build the preview from source](#windows-preview-build)
-
-<a href="https://www.star-history.com/?repos=caezium%2FBurrow&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
-   <img height="350" alt="Star History Chart" src="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
- </picture>
-</a>
+Windows: download from [releases](https://github.com/caezium/Burrow/releases)
 
 ## Contents
 
-- [Platforms](#platforms)
 - [Screenshots](#screenshots)
 - [The tools](#the-tools)
+- [Platforms](#platforms)
+- [Roadmap](#roadmap)
 - [How Burrow compares to other tools](#how-burrow-compares-to-other-tools)
 - [Settings](#settings)
 - [Permissions & Full Disk Access](#permissions--full-disk-access)
@@ -49,22 +38,6 @@ stdio bridge, CI, tests, and unsigned release packaging.
 - [Develop & test](#develop--test)
 - [Architecture](#architecture)
 - [Attribution & license](#attribution--license)
-
-## Platforms
-
-| | macOS | Windows |
-|---|---|---|
-| Status | **Stable** — flagship | **Preview** — checked in under `windows/` |
-| Engine | `mo` (Go CLI, via Homebrew) | bundled Mole/PowerShell engine plus Windows fallbacks where needed |
-| UI | SwiftUI, translucent menu-bar app | WinUI 3 / .NET 8 |
-| Install | `brew install --cask caezium/tap/burrow` | build from source; unsigned preview artifacts via `windows/scripts/build-release.ps1` |
-| Source | [`macos/`](macos/) | [`windows/`](windows/) |
-
-Both apps live in this one repo, side by side, sharing this README, the landing
-site, and release documentation. The Windows preview currently includes a native
-shell, tool pages, local telemetry/history, loopback HTTP/MCP surfaces, tests,
-CI, and unsigned local packaging. See the [Windows architecture notes](windows/docs/windows-architecture.md)
-and [release notes](windows/docs/release.md).
 
 ## Screenshots
 
@@ -104,7 +77,11 @@ and [release notes](windows/docs/release.md).
   <em>Explain with AI — point an MCP-capable agent (Claude Code, or a local model via LM Studio) at Burrow and ask your Mac in plain language.</em>
   <br>
   <img alt="Explain with AI — burrow_snapshot analyzed in plain language" src="https://raw.githubusercontent.com/caezium/Burrow/main/docs/assets/shot-ai.png">
+  <em>When doing other tasks with AI Agents, if they find something irregular with your system, for example low disk space, they will have the tools to automatically disect the problem, and perform secure cleanups for you proactively and autonomously, without you having to ask.</em>
+  <br>
+  <img width="1177" height="887" alt="image" src="https://github.com/user-attachments/assets/e067a39f-808b-41a8-ac02-9dd19cabf929" />
 </p>
+
 
 <p align="center">
   <img width="320" alt="Menu-bar HUD — health, metric tiles, top processes, and live job status" src="https://github.com/user-attachments/assets/105ef0ca-b970-4eec-8604-db21f458b816">
@@ -132,6 +109,18 @@ and [release notes](windows/docs/release.md).
 </table>
 
 ## The tools
+
+Burrow wraps a bundled, open-source Mole engine in a native desktop app: clean
+junk, purge dev artifacts, sweep leftover installers, uninstall apps, run safe
+maintenance, map your disk, and watch live system status — in one window. On top
+of that it adds things the CLI doesn't have: a **long-running history** of your
+machine's metrics in a local store and an **MCP server** so any AI agent (Claude
+Code, Cursor, Codex…) can ask "what's been happening on this machine."
+
+**macOS** is the mature flagship. **Windows** currently has a native WinUI 3 /
+.NET 8 preview app, Windows telemetry/history, tray HUD, loopback HTTP, MCP
+stdio bridge, CI, tests, and unsigned release packaging.
+
 
 | Tool | What it does | `mo` command |
 |---|---|---|
@@ -172,6 +161,23 @@ A live, glanceable read of your Mac's vitals, refreshed continuously:
   an optional localhost HTTP API, so any AI agent can query your Mac's recent
   state. See [Use it with your AI agent](#use-it-with-your-ai-agent).
 
+
+## Platforms
+
+| | macOS | Windows |
+|---|---|---|
+| Status | **Stable** — flagship | **Preview** — checked in under `windows/` |
+| Engine | bundled MIT engine (a fork of `mo`, Go CLI); falls back to a system `mo` | bundled Mole/PowerShell engine plus Windows fallbacks where needed |
+| UI | SwiftUI, translucent menu-bar app | WinUI 3 / .NET 8 |
+| Install | `brew install --cask caezium/tap/burrow` | build from source; unsigned preview artifacts via `windows/scripts/build-release.ps1` |
+| Source | [`macos/`](macos/) | [`windows/`](windows/) |
+
+Both apps live in this one repo, side by side, sharing this README, the landing
+site, and release documentation. The Windows preview currently includes a native
+shell, tool pages, local telemetry/history, loopback HTTP/MCP surfaces, tests,
+CI, and unsigned local packaging. See the [Windows architecture notes](windows/docs/windows-architecture.md)
+and [release notes](windows/docs/release.md).
+
 ### Windows preview
 
 The checked-in Windows app currently includes:
@@ -192,6 +198,34 @@ The checked-in Windows app currently includes:
 - Unit tests, Windows CI, local smoke-test helpers, and an unsigned release
   script that produces a setup executable, portable ZIP, hashes, and WinGet
   manifests.
+
+## Roadmap
+
+<!-- ROADMAP:BEGIN generated by scripts/site-release.py — edit docs/roadmap.json instead -->
+The full board, with status and voting, lives at **[burrow.henryzh.dev/roadmap](https://burrow.henryzh.dev/roadmap.html)**. Vote by upvoting an issue, or [open a request](https://github.com/caezium/Burrow/issues/new/choose).
+
+**Planned**
+
+- Signed & notarized macOS builds — A Developer ID signature so Gatekeeper trusts Burrow without the right-click → Open dance.
+- In-app auto-update — Once builds are signed, silent background update checks with a one-click install (Sparkle).
+- Windows preview → first stable — Data-loss and supply-chain hardening, parity, and test coverage before it loses the “preview” label. ([#93](https://github.com/caezium/Burrow/issues/93))
+
+**Considering**
+
+- Persistent one-tap “run all” Tune-Up — A saved Smart-Care routine you trigger in one tap from the dashboard. ([#77](https://github.com/caezium/Burrow/issues/77))
+
+_Recently shipped: Bundled MIT engine — no separate `mo` install, Process inspector + CPU watchdog, Get Online connectivity companion, Security-aware Doctor, No-freeze live dashboard — see the [changelog](https://burrow.henryzh.dev/releases.html)._
+<!-- ROADMAP:END -->
+
+
+<a href="https://www.star-history.com/?repos=caezium%2FBurrow&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
+   <img height="350" alt="Star History Chart" src="https://api.star-history.com/chart?repos=caezium/Burrow&type=timeline&legend=top-left" />
+ </picture>
+</a>
+
 
 ## How Burrow compares to other tools
 
@@ -227,8 +261,8 @@ Everything is local and takes effect immediately unless noted:
 | **App language** | Follow the system, or force English / 简体中文 / 繁體中文 *(relaunch)*. |
 | **Menu-bar icon** | Show the menu-bar item, or run as a regular Dock app instead. |
 | **MCP / agent access** | Copyable stdio config + the tool list for Claude Code, Cursor, Codex, Cline, and any MCP client. |
-| **Local HTTP query server** | Optional loopback REST API + port for dashboards/curl *(relaunch)*. |
-| **Mole engine** | Shows the installed `mo` version, with a one-click **Update Mole**. |
+| **Local HTTP query server** | Optional loopback REST endpoints + port for dashboards/curl. On Windows, disabling this keeps the local `/mcp` bridge available for stdio MCP. |
+| **Mole engine** | Shows the engine version Burrow is running, with a one-click **Update Mole**. |
 
 ## Permissions & Full Disk Access
 
@@ -249,8 +283,10 @@ handles this honestly:
 ### macOS
 
 - **macOS 14+**
-- **The Mole CLI** — `brew install mole`. Hard requirement; Burrow refuses to
-  launch without `mo` on PATH (and offers a guided install if it's missing).
+- **No separate engine install.** Burrow bundles its own MIT engine
+  (`burrow-engine`) and runs it directly. _(Building from source? The engine is
+  staged from a git submodule; if it isn't present, Burrow falls back to a
+  system `mo` — `brew install mole`.)_
 
 ### Windows preview
 
@@ -267,8 +303,7 @@ handles this honestly:
 ### Homebrew (recommended)
 
 ```bash
-brew install mole                        # required engine
-brew install --cask caezium/tap/burrow   # the app (clears quarantine)
+brew install --cask caezium/tap/burrow   # the app + bundled engine (clears quarantine)
 ```
 
 ### Direct download
@@ -287,6 +322,7 @@ open /Applications/Burrow.app
 ```bash
 brew install xcodegen mole
 git clone https://github.com/caezium/Burrow.git && cd Burrow/macos
+bash ../scripts/fetch-sentry.sh   # vendor Sentry.xcframework (it's a local framework, not an SPM dep)
 xcodegen generate
 xcodebuild -project Burrow.xcodeproj -scheme Burrow \
   -configuration Release -destination 'generic/platform=macOS' \
@@ -323,7 +359,7 @@ unsigned Inno Setup installer, creates a portable ZIP fallback, writes
 
 ## Security & trust
 
-Burrow drives the audited `mo` CLI. The honest privacy picture:
+Burrow drives a bundled, open-source Mole engine (an MIT fork of `mo`). The honest privacy picture:
 
 - **No accounts, no ads.** Your metrics, history, and file contents stay on
   your machine. The macOS app sends opt-out, anonymous usage analytics and crash
@@ -332,9 +368,11 @@ Burrow drives the audited `mo` CLI. The honest privacy picture:
 - **No background root helper.** When Clean/Optimize need admin rights, macOS's
   own dialog asks you and Burrow runs that one `mo` command, then exits — you
   approve every elevation.
-- **Local-only surfaces:** the MCP HTTP server is loopback-only
-  (`127.0.0.1`) and history is stored locally. The macOS Updates tab runs
-  `brew outdated`, the same check `brew` does for itself.
+- **Local-only surfaces:** the MCP/HTTP surfaces bind to loopback only
+  (`127.0.0.1`) and history is stored locally. On Windows, the HTTP REST toggle
+  disables REST endpoints but keeps the local `/mcp` bridge route available for
+  stdio MCP clients. The macOS Updates tab runs `brew outdated`, the same check
+  `brew` does for itself.
 - **Unsigned preview builds:** macOS release zips and Windows preview artifacts
   are unsigned in the current repo state. Windows direct-download users should
   expect SmartScreen or stricter Application Control policy prompts.
@@ -390,17 +428,31 @@ Windows preview builds include the stdio bridge in source under
 `windows/Tools/McpStdioBridge/` and in release artifacts as
 `Assets\Mcp\burrow-mcp-stdio.exe`.
 
-**Tools:**
+**Tools** — 19 over MCP, read-only by default. The full reference, with **when an
+agent should reach for each**, is in **[docs/agent-tools.md](docs/agent-tools.md)**.
+The essentials:
 
-- `burrow_snapshot` — the latest full status snapshot
-- `burrow_history` — a time-series slice of recent snapshots
-- `burrow_top_processes` — top processes by peak CPU over a window
-- `burrow_process_usage` — rank processes by `cpu_time` / `peak_cpu` / `avg_cpu`
-  / `peak_mem`, with the window it used echoed back
-- `burrow_info` — what Burrow is recording, retention, and freshness
+- **Status & history** — `burrow_snapshot`, `burrow_history`, `burrow_top_processes`,
+  `burrow_process_usage` (rank by `cpu_time`/`peak_cpu`/`avg_cpu`/`peak_mem`),
+  `burrow_diff`, `burrow_disk_forecast`, `burrow_report`
+- **Diagnose** — `burrow_doctor` (Full Disk Access, memory pressure, disk headroom,
+  SIP/Gatekeeper/FileVault/firewall, battery, high-CPU, display/volume/network),
+  `burrow_ports`, `burrow_info`
+- **Disk & apps** — `burrow_analyze`, `burrow_list_apps`, `burrow_cleanup_history`,
+  `burrow_deleted_files`
+- **Maintain (gated)** — `burrow_clean`, `burrow_optimize`, `burrow_uninstall`,
+  `burrow_purge`, `burrow_installer`
 
-There's also an optional localhost HTTP API (`127.0.0.1:9277` — `/health`,
-`/info`, `/snapshot`, `/metrics`) for dashboards or curl.
+Actuating tools preview (`--dry-run`) unless `confirm:true` **and** the matching
+Settings opt-in is enabled — an agent can always look, but only acts with your say-so.
+
+Windows also keeps `burrow_uninstall(action=...)` as a compatibility tool for
+list, leftover-preview, and confirmed vendor-uninstaller launch workflows.
+
+There's also an optional localhost REST API (`127.0.0.1:9277` — `/health`,
+`/info`, `/snapshot`, `/metrics`) for dashboards or curl. On Windows, disabling
+REST in Settings does not close the loopback listener because the stdio MCP
+bridge still posts to `/mcp`.
 
 ## Develop & test
 
@@ -408,6 +460,7 @@ There's also an optional localhost HTTP API (`127.0.0.1:9277` — `/health`,
 
 ```bash
 cd macos        # the macOS app lives here (monorepo: macos/ + windows/)
+bash ../scripts/fetch-sentry.sh   # vendor Sentry.xcframework (it's a local framework, not an SPM dep)
 xcodegen generate
 xcodebuild -project Burrow.xcodeproj -scheme Burrow \
   -configuration Debug -destination 'platform=macOS' test
@@ -466,7 +519,8 @@ gaps in the Windows Mole branch. See
 [MIT](LICENSE).
 
 - **Mole CLI** (`mo`) is © [tw93](https://github.com/tw93/Mole), MIT. Burrow
-  depends on it at runtime and bundles nothing from it.
+  bundles **`burrow-engine`**, an MIT fork of Mole pinned at its last MIT
+  release, and runs that as its engine.
 - Inspired by the **mole.fit** Mac app (same author as `mo`). Burrow is an
   independent reimplementation with its own brand — no assets, icons, copy, or
   trade dress are taken from mole.fit.

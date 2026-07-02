@@ -17,9 +17,16 @@ import AppKit
 import SwiftUI
 import Combine
 
-final class StatusBarController: NSObject, NSMenuDelegate {
+final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     private let item: NSStatusItem
     private let popover: NSPopover
+    /// Invisible helper window pinned at the status button's screen position,
+    /// used to anchor the popover instead of the button itself. With an
+    /// auto-hiding / auto-collapsing menu bar, macOS shoves the status item's
+    /// own window to the screen's left edge when the bar hides, and a popover
+    /// anchored to that button rides along with it (issue #223). Anchoring to a
+    /// window we place and own keeps the popover put. Alive only while shown.
+    private var anchorWindow: NSWindow?
     private let db: DB
     private let producer: SnapshotProducer
     private weak var delegate: AppDelegate?
@@ -69,6 +76,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         self.popover = popover
 
         super.init()
+
+        // Tear down the anchor window once the (transient) popover closes.
+        self.popover.delegate = self
 
         if let button = self.item.button {
             // Burrow's own mark as a template glyph (adapts to the menu bar).
@@ -142,6 +152,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         appendHistory(.cpu, s.cpu.usage)
         appendHistory(.memory, s.memory.usedPercent)
         if let g = s.gpu?.first, g.usage >= 0 { appendHistory(.gpu, g.usage) }
+        if let p = s.thermal?.systemPower, p > 0 { appendHistory(.power, p) }
         renderMetrics()
     }
 
@@ -184,6 +195,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             if let t = s.thermal {
                 if t.fanSpeed > 0 || (t.fanCount ?? 0) > 0 { v.primary[.fan] = Double(t.fanSpeed) }
                 if let temp = t.bestTemp { v.primary[.temperature] = temp }
+                if t.systemPower > 0 { v.primary[.power] = t.systemPower }
             }
             if let b = s.batteries?.first {
                 v.primary[.battery] = b.percent
@@ -198,6 +210,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         v.histories[.cpu]    = menuBarHistory[.cpu]
         v.histories[.memory] = menuBarHistory[.memory]
         v.histories[.gpu]    = menuBarHistory[.gpu]
+        v.histories[.power]  = menuBarHistory[.power]
+        // Memory-pressure percentage (compressor share) for the "By pressure"
+        // colour — the same signal the dashboard/popover memory tiles read.
+        v.memoryPressurePercent = MemoryPressure.percent()
         return v
     }
 
@@ -293,6 +309,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     deinit {
         if let o = updateObserver { NotificationCenter.default.removeObserver(o) }
+        anchorWindow?.orderOut(nil)
         runnerTimer?.cancel()
         // Explicitly remove the item so toggling the menu-bar setting off
         // (AppDelegate drops its reference) clears it from the bar at once.
@@ -308,13 +325,51 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         if self.popover.isShown {
             self.popover.performClose(sender)
         } else {
-            self.popover.show(relativeTo: button.bounds,
-                              of: button,
-                              preferredEdge: .minY)
+            self.showPopover(from: button)
             // Pull focus so the popover's keyboard shortcuts (⌘Q etc.)
             // are reachable without a second click.
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    /// Present the HUD popover anchored to a fixed, invisible helper window
+    /// pinned at the status button's *screen* position — not the button
+    /// itself. See `anchorWindow`: this is what stops the popover from flying
+    /// to the left edge when an auto-hiding/collapsing menu bar hides the
+    /// status item's own window (issue #223).
+    private func showPopover(from button: NSStatusBarButton) {
+        guard let buttonWindow = button.window else {
+            // No window to convert from — fall back to the direct anchor.
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            return
+        }
+        // Capture the button's frame in screen coordinates while the menu bar
+        // is still up, then hold a window there that the menu bar can't move.
+        let screenFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+
+        let anchor = NSWindow(contentRect: screenFrame, styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        anchor.isReleasedWhenClosed = false
+        anchor.backgroundColor = .clear
+        anchor.isOpaque = false
+        anchor.hasShadow = false
+        anchor.ignoresMouseEvents = true
+        anchor.level = .statusBar
+        anchor.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        anchor.contentView = NSView(frame: NSRect(origin: .zero, size: screenFrame.size))
+        anchor.orderFrontRegardless()
+        self.anchorWindow = anchor
+
+        if let content = anchor.contentView {
+            popover.show(relativeTo: content.bounds, of: content, preferredEdge: .minY)
+        }
+    }
+
+    /// Drop the anchor window once the popover is gone (transient dismiss or a
+    /// second icon click), so it doesn't leak or linger over the menu bar.
+    func popoverDidClose(_ notification: Notification) {
+        anchorWindow?.orderOut(nil)
+        anchorWindow = nil
     }
 
     // MARK: - Right-click quick menu

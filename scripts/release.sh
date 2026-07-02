@@ -12,6 +12,11 @@ cd "$(dirname "$0")/.."
 
 command -v xcodegen >/dev/null 2>&1 || { echo "need xcodegen — brew install xcodegen"; exit 1; }
 
+echo "==> fetching vendored Sentry.xcframework"
+# Sentry is a local framework, not an SPM package (SPM's binary-artifact
+# download hard-hangs the release runner — see scripts/fetch-sentry.sh).
+bash scripts/fetch-sentry.sh
+
 echo "==> xcodegen generate"
 # The macOS app lives under macos/ (monorepo: macos/ + windows/). Generate the
 # project there; build artifacts still land at the repo root (build_dist/, dist/).
@@ -33,7 +38,8 @@ xcodebuild -project macos/Burrow.xcodeproj -scheme Burrow \
   POSTHOG_API_KEY="${POSTHOG_API_KEY:-}" \
   POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}" \
   SENTRY_DSN="${SENTRY_DSN:-}" \
-  build >/dev/null
+  ${BURROW_ENGINE_SRC:+BURROW_ENGINE_SRC="$BURROW_ENGINE_SRC"} \
+  build
 
 APP="build_dist/Build/Products/Release/Burrow.app"
 [ -d "$APP" ] || { echo "build failed: $APP missing"; exit 1; }

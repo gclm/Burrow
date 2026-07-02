@@ -79,4 +79,31 @@ final class DoctorTests: XCTestCase {
         let worst = Doctor.report(i).max { $0.level.rawValue < $1.level.rawValue }
         XCTAssertEqual(worst?.level, .fail, "Level.rawValue orders ok<warn<fail for sorting")
     }
+
+    func testReport_securityAllOn_okAndAppended() {
+        var i = healthy()
+        i.sip = .on; i.gatekeeper = .on; i.fileVault = .on; i.firewall = .on
+        let r = Doctor.report(i)
+        XCTAssertEqual(check(r, "Security")?.level, .ok)
+        XCTAssertEqual(r.count, 8)   // 7 + Security
+    }
+
+    func testReport_securityFacetOff_warns() {
+        var i = healthy()
+        i.sip = .on; i.gatekeeper = .on; i.fileVault = .off; i.firewall = .on
+        let c = check(Doctor.report(i), "Security")
+        XCTAssertEqual(c?.level, .warn)
+        XCTAssertTrue(c?.detail.contains("FileVault") ?? false)
+    }
+
+    func testReport_securityUnknown_omitted() {
+        XCTAssertNil(check(Doctor.report(healthy()), "Security"))  // healthy() leaves facets .unknown
+    }
+
+    func testReport_highCPU_warns() {
+        var hot = healthy(); hot.cpuLoadPercent = 95
+        XCTAssertEqual(check(Doctor.report(hot), "CPU load")?.level, .warn)
+        var calm = healthy(); calm.cpuLoadPercent = 20
+        XCTAssertEqual(check(Doctor.report(calm), "CPU load")?.level, .ok)
+    }
 }

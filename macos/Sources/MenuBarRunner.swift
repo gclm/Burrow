@@ -59,6 +59,8 @@ enum RunnerCatalog {
         .init(id: "pulse",  title: NSLocalizedString("Pulse", comment: "")),
         .init(id: "orbit",  title: NSLocalizedString("Orbit", comment: "")),
         .init(id: "stride", title: NSLocalizedString("Stride", comment: "")),
+        .init(id: "wave",   title: NSLocalizedString("Wave", comment: "")),
+        .init(id: "bars",   title: NSLocalizedString("Bars", comment: "")),
     ]
 
     /// Frames for a built-in runner at the given height (square frames).
@@ -94,6 +96,26 @@ enum RunnerCatalog {
                 }
                 let body = NSBezierPath(ovalIn: NSRect(x: mid.x - 3, y: rect.midY + rect.height * 0.10, width: 6, height: 6))
                 c.setFill(); body.fill()
+            case "wave":
+                let wave = NSBezierPath()
+                let steps = 24
+                for k in 0...steps {
+                    let x = rect.minX + rect.width * CGFloat(k) / CGFloat(steps)
+                    let y = mid.y + sin((CGFloat(k) / CGFloat(steps) * 2 + phase) * 2 * .pi) * rect.height * 0.22
+                    if k == 0 { wave.move(to: NSPoint(x: x, y: y)) } else { wave.line(to: NSPoint(x: x, y: y)) }
+                }
+                wave.lineWidth = 1.5; wave.lineCapStyle = .round; c.setStroke(); wave.stroke()
+            case "bars":
+                let n = 4
+                let bw = rect.width * 0.12
+                let span = rect.width * 0.5
+                let startX = rect.midX - span / 2
+                for k in 0..<n {
+                    let h = rect.height * (0.22 + 0.5 * abs(sin((phase + CGFloat(k) / CGFloat(n)) * 2 * .pi)))
+                    let x = startX + span * CGFloat(k) / CGFloat(n - 1)
+                    let bar = NSBezierPath(roundedRect: NSRect(x: x - bw / 2, y: mid.y - h / 2, width: bw, height: h), xRadius: 1, yRadius: 1)
+                    c.setFill(); bar.fill()
+                }
             default: // "pulse" — concentric expanding rings
                 for k in 0..<3 {
                     let t = (phase + CGFloat(k) / 3).truncatingRemainder(dividingBy: 1)

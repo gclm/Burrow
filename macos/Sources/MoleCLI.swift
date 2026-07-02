@@ -73,13 +73,26 @@ enum MoleCLI {
         return nil
     }
 
-    /// The known install locations ONLY — no PATH lookup. ELEVATED runs
-    /// must resolve through this: accepting a user-writable PATH entry
-    /// would hand root to whatever binary shadowed `mo` first.
+    /// The MIT engine bundled inside the app at Contents/Resources/engine/mole. Preferred
+    /// over any system `mo`: users run our engine with zero install and never touch upstream
+    /// (GPL-relicensed) mo. It's part of the signed app bundle, so it's a trusted location.
+    static func bundledExecutable() -> String? {
+        guard let url = Bundle.main.url(forResource: "mole", withExtension: nil,
+                                        subdirectory: "engine") else { return nil }
+        return FileManager.default.isExecutableFile(atPath: url.path) ? url.path : nil
+    }
+
+    /// The known trusted locations ONLY — no PATH lookup. ELEVATED runs must resolve through
+    /// this: accepting a user-writable PATH entry would hand root to whatever binary shadowed
+    /// the engine first. Order: bundled engine → installed `burrow-engine` (the MIT fork) →
+    /// legacy upstream `mo` (back-compat for existing installs).
     static func trustedExecutable() -> String? {
+        if let bundled = bundledExecutable() { return bundled }
         let candidates = [
-            "/opt/homebrew/bin/mo",      // Apple Silicon Homebrew
-            "/usr/local/bin/mo",          // Intel Homebrew / manual install
+            "/opt/homebrew/bin/burrow-engine",  // MIT fork, if installed
+            "/usr/local/bin/burrow-engine",
+            "/opt/homebrew/bin/mo",             // legacy upstream (back-compat)
+            "/usr/local/bin/mo",
             "/usr/bin/mo",
         ]
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
@@ -124,11 +137,13 @@ enum MoleCLI {
 
     // MARK: - Install / version
 
-    /// Canonical install command (Homebrew). Shown in the guided install
-    /// flow; we never run it for the user.
-    static let installCommand = "brew install mole"
-    /// Where to send users without Homebrew.
-    static let repoURL = URL(string: "https://github.com/tw93/Mole")!
+    /// The MIT engine normally ships BUNDLED inside the app (zero install). This is only the
+    /// fallback hint shown if the bundled copy is somehow unavailable — reinstalling the app
+    /// restores it.
+    static let installCommand = "brew install --cask caezium/tap/burrow"
+    /// The engine fork (the MIT engine is bundled with the app, pinned at mo's last MIT
+    /// release before upstream relicensed to GPL-3.0).
+    static let repoURL = URL(string: "https://github.com/caezium/burrow-engine")!
 
     /// Current `mo` version, or nil if not installed / unparsable.
     static func version() -> String? {
@@ -154,6 +169,31 @@ enum MoleCLI {
     /// TUI instead, which opens /dev/tty and dies when the parent is a
     /// GUI app with no controlling terminal (#35).
     static let minimumAnalyzeJSONVersion = "1.29.0"
+
+    /// Oldest Mole whose `status --watch` streams NDJSON (V1.44.0, "Signal").
+    /// Below this Burrow polls `mo status --json` instead.
+    static let minimumWatchVersion = "1.44.0"
+
+    /// Whether the installed `mo` supports `status --watch`. Spawns
+    /// `mo --version` — call OFF the main thread.
+    static func supportsWatch() -> Bool {
+        guard let v = version() else { return false }
+        return versionAtLeast(v, minimumWatchVersion)
+    }
+
+    /// True if `version` ≥ `minimum`, compared numerically component-by-
+    /// component (missing components count as 0). Pure → unit-tested.
+    static func versionAtLeast(_ version: String, _ minimum: String) -> Bool {
+        func parts(_ s: String) -> [Int] {
+            s.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        }
+        let v = parts(version), m = parts(minimum)
+        for i in 0..<max(v.count, m.count) {
+            let a = i < v.count ? v[i] : 0, b = i < m.count ? m[i] : 0
+            if a != b { return a > b }
+        }
+        return true
+    }
 
     /// Result of a subprocess invocation. `exitCode == 0` is the success
     /// convention; callers that care about diagnostics should look at

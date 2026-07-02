@@ -111,6 +111,13 @@ enum CrashReporter {
                     event.fingerprint = ["burrow-app-hang"]
                     if Double.random(in: 0..<1) >= appHangKeepRate { return nil }
                 }
+                // Drop App-Hang (ANR) reports from acutely memory-starved
+                // machines: a ≥2 s main-thread stall when the system has only
+                // tens of MB free is the OS thrashing the render/display commit
+                // (these dominate the ANR feed from a few RAM-starved macOS 27
+                // betas), not a Burrow defect. Real hangs on healthy machines
+                // still report.
+                if isMemoryStarvedAppHang(event) { return nil }
                 return event
             }
         }
@@ -148,6 +155,22 @@ enum CrashReporter {
                 frame.fileName = redact(frame.fileName)
             }
         }
+    }
+
+    /// True for an App-Hang event whose device reports critically low free
+    /// memory (< 150 MB). At that point a ≥2 s main-thread freeze is the system
+    /// thrashing the render/display commit under memory pressure — not a Burrow
+    /// defect — and these dominate the ANR feed from a handful of RAM-starved
+    /// machines (notably macOS 27 betas). Healthy machines still report hangs.
+    /// Conservative: if free memory can't be read, the event is kept.
+    private static func isMemoryStarvedAppHang(_ event: Event) -> Bool {
+        let isAppHang = event.exceptions?.contains {
+            ($0.mechanism?.type ?? "").hasPrefix("AppHang")
+        } ?? false
+        guard isAppHang else { return false }
+        guard let free = (event.context?["device"]?["free_memory"] as? NSNumber)?.int64Value
+        else { return false }
+        return free < 150 * 1024 * 1024
     }
 }
 

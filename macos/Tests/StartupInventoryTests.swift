@@ -91,4 +91,51 @@ final class StartupInventoryTests: XCTestCase {
                                           kind: .launchDaemon, scope: .system)
         XCTAssertTrue(items.isEmpty)
     }
+
+    // MARK: - Modern Login (BTM) items merge
+
+    private func plistItem(_ label: String) -> StartupItem {
+        StartupItem(label: label, kind: .launchAgent, scope: .user,
+                    plistPath: "/x/\(label).plist", executable: "/bin/echo", problem: nil)
+    }
+
+    private func btm(_ name: String, _ id: String) -> LoginItemsReader.Item {
+        LoginItemsReader.Item(name: name, identifier: id, developer: "", type: "developer", enabled: true)
+    }
+
+    func testMerge_addsBtmItemsNotCoveredByPlists() {
+        let merged = StartupInventory.merge(
+            plistItems: [plistItem("com.docker.docker")],
+            login: [btm("Docker", "com.docker.docker"),
+                    btm("studio-route-guard.sh", "16.com.henry.studio-route-guard")])
+        // Docker is already enumerated as a plist agent → not duplicated.
+        XCTAssertEqual(merged.filter { $0.label == "Docker" }.count, 0)
+        XCTAssertEqual(merged.filter { $0.kind == .loginItem }.count, 1)
+        let rg = merged.first { $0.label == "studio-route-guard.sh" }
+        XCTAssertEqual(rg?.kind, .loginItem)
+    }
+
+    func testMerge_btmItemsAreReviewOnly() {
+        let merged = StartupInventory.merge(
+            plistItems: [], login: [btm("studio-route-guard.sh", "16.com.henry.studio-route-guard")])
+        let rg = merged.first { $0.kind == .loginItem }
+        XCTAssertNotNil(rg)
+        XCTAssertFalse(rg!.controllable, "BTM items can't be launchctl-toggled")
+        XCTAssertEqual(rg!.id, "btm:16.com.henry.studio-route-guard", "synthetic, stable id")
+    }
+
+    func testMerge_dedupsByContainerPrefixedIdentifier() {
+        // A plist agent labelled "com.henry.studio-route-guard" already covers
+        // the BTM record "16.com.henry.studio-route-guard".
+        let merged = StartupInventory.merge(
+            plistItems: [plistItem("com.henry.studio-route-guard")],
+            login: [btm("studio-route-guard.sh", "16.com.henry.studio-route-guard")])
+        XCTAssertEqual(merged.filter { $0.kind == .loginItem }.count, 0)
+    }
+
+    func testMerge_skipsPlaceholderRecords() {
+        let merged = StartupInventory.merge(
+            plistItems: [], login: [btm("Unknown Developer", "Unknown Developer")])
+        XCTAssertTrue(merged.filter { $0.kind == .loginItem }.isEmpty)
+    }
 }

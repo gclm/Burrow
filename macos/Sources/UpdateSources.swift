@@ -89,6 +89,7 @@ enum UpdateSources {
     struct MASResult {
         let version: String
         let pageURL: URL?
+        let minimumOsVersion: String?
     }
 
     static func parseITunesLookup(_ data: Data) -> MASResult? {
@@ -97,7 +98,8 @@ enum UpdateSources {
               let first = results.first,
               let version = first["version"] as? String else { return nil }
         let page = (first["trackViewUrl"] as? String).flatMap(URL.init(string:))
-        return MASResult(version: version, pageURL: page)
+        return MASResult(version: version, pageURL: page,
+                         minimumOsVersion: first["minimumOsVersion"] as? String)
     }
 
     static func itunesLookupURL(bundleID: String) -> URL {

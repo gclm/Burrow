@@ -104,6 +104,37 @@ enum Store {
         set { write(newValue, "auto_vacuum") }
     }
 
+    /// Keep Screen On also prevents system sleep (survives a closed lid). Off by
+    /// default — it changes power behaviour (PRD §Everyday).
+    static var keepAwakeLidClosed: Bool {
+        get { d.object(forKey: "keep_awake_lid_closed") as? Bool ?? false }
+        set { write(newValue, "keep_awake_lid_closed") }
+    }
+
+    // MARK: - Process watchdog (PRD §α)
+
+    /// Auto-act on a process that stays over a CPU threshold. Off by default —
+    /// it can quit/suspend processes, so it's strictly opt-in.
+    static var processWatchdogEnabled: Bool {
+        get { d.object(forKey: "proc_watchdog_enabled") as? Bool ?? false }
+        set { write(newValue, "proc_watchdog_enabled") }
+    }
+    /// Sustained-CPU threshold, percent.
+    static var processWatchdogCPU: Double {
+        get { d.object(forKey: "proc_watchdog_cpu") as? Double ?? 90 }
+        set { write(newValue, "proc_watchdog_cpu") }
+    }
+    /// How long it must stay over threshold before the rule fires, seconds.
+    static var processWatchdogSeconds: Int {
+        get { d.object(forKey: "proc_watchdog_seconds") as? Int ?? 30 }
+        set { write(newValue, "proc_watchdog_seconds") }
+    }
+    /// "notify" | "suspend" | "quit" (ProcessRule.Action raw value).
+    static var processWatchdogAction: String {
+        get { d.string(forKey: "proc_watchdog_action") ?? "notify" }
+        set { write(newValue, "proc_watchdog_action") }
+    }
+
     // MARK: - Menu bar
 
     /// Whether to install the menu-bar status item (issue #4). On by

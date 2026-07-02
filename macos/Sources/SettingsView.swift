@@ -37,7 +37,7 @@ struct SettingsView: View {
     /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
     /// Esc leaves Settings (RootView returns to the previous pane). The
-    /// pane has no close chrome of its own — navigation lives in TopNav.
+    /// pane has no close chrome of its own — navigation lives in the floating rail.
     var onClose: (() -> Void)?
 
     @State private var tab: Tab = .general
@@ -49,7 +49,9 @@ struct SettingsView: View {
     /// means a relaunch is needed before scans can reach protected caches.
     private let fdaAtOpen = Privacy.hasFullDiskAccess()
     @State private var appLanguage: String = Store.appLanguage
-    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
+    // Loaded off-main in onAppear — `SMAppService.status` is a synchronous
+    // XPC call that hung the main thread when read in this @State initializer.
+    @State private var launchAtLogin: Bool = false
     @State private var hideDockIcon: Bool = Store.hideDockIcon
     @State private var skipIntro: Bool = Store.skipIntro
     @State private var notifyOnCompletion: Bool = Store.notifyOnCompletion
@@ -58,6 +60,10 @@ struct SettingsView: View {
     @State private var thresholdAlerts: Bool = Store.thresholdAlertsEnabled
     @State private var cpuAlertThreshold: Int = Store.cpuAlertThreshold
     @State private var memAlertThreshold: Int = Store.memAlertThreshold
+    @State private var processWatchdog: Bool = Store.processWatchdogEnabled
+    @State private var procWatchdogCPU: Int = Int(Store.processWatchdogCPU)
+    @State private var procWatchdogSeconds: Int = Store.processWatchdogSeconds
+    @State private var procWatchdogAction: String = Store.processWatchdogAction
     @State private var showRestore = false
     @State private var brewBusy = false
     @State private var brewSnapshotStatus = ""
@@ -84,6 +90,7 @@ struct SettingsView: View {
     @State private var popupTiles: Set<MenuBarMetric> = Store.popupTiles
     @State private var runnerConfig: RunnerConfig = Store.runnerConfig
     @State private var inputLock: Bool = Store.cleanScreenInputLock
+    @State private var keepAwakeLidClosed: Bool = Store.keepAwakeLidClosed
     @State private var axTrusted = CleanScreen.inputLockPermitted()
 
     // Advanced
@@ -153,7 +160,7 @@ struct SettingsView: View {
             .frame(width: 460, height: 440)
         }
         .onAppear {
-            refreshStatusLabels(); loadMoleVersion(); loadTouchIDStatus()
+            refreshStatusLabels(); loadMoleVersion(); loadTouchIDStatus(); loadLaunchAtLogin()
             whitelistPatterns = MoleWhitelist.live.patterns()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -279,6 +286,30 @@ struct SettingsView: View {
                             .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
                     }
                     .onChange(of: memAlertThreshold) { _, v in Store.memAlertThreshold = v }
+                }
+                toggleRow("High-CPU process watchdog", isOn: $processWatchdog) { Store.processWatchdogEnabled = $0 }
+                footnote("Acts automatically on a process that stays pegged. Off by default — Suspend and Quit only affect your own processes; Notify just warns you.")
+                if processWatchdog {
+                    Stepper(value: $procWatchdogCPU, in: 50...100, step: 5) {
+                        Text(String(format: NSLocalizedString("When a process stays above %d%% CPU", comment: ""), procWatchdogCPU))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: procWatchdogCPU) { _, v in Store.processWatchdogCPU = Double(v) }
+                    Stepper(value: $procWatchdogSeconds, in: 10...300, step: 10) {
+                        Text(String(format: NSLocalizedString("for at least %d seconds", comment: ""), procWatchdogSeconds))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .onChange(of: procWatchdogSeconds) { _, v in Store.processWatchdogSeconds = v }
+                    Picker(selection: $procWatchdogAction) {
+                        Text(NSLocalizedString("Notify me", comment: "")).tag("notify")
+                        Text(NSLocalizedString("Suspend it", comment: "")).tag("suspend")
+                        Text(NSLocalizedString("Quit it", comment: "")).tag("quit")
+                    } label: {
+                        Text(NSLocalizedString("Then", comment: ""))
+                            .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: procWatchdogAction) { _, v in Store.processWatchdogAction = v }
                 }
             }
 
@@ -411,7 +442,7 @@ struct SettingsView: View {
                                     (60, "60 sec"), (120, "2 min"), (300, "5 min")]) {
                     Store.sampleIntervalSeconds = $0
                 }
-                footnote("Burrow runs `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
+                footnote("With Mole 1.44+ Burrow streams `mo status --watch` for live status; on older mo it falls back to polling `mo status --json` at this cadence. 60 s is plenty for charts; tighter intervals give finer detail at the cost of more subprocess churn.")
             }
         }
     }
@@ -463,6 +494,13 @@ struct SettingsView: View {
                 shortcutRow("Keep Screen On", action: .keepScreenOn)
                 shortcutRow("Clean Screen", action: .cleanScreen)
                 footnote("System-wide. Click a chip, press a combination with ⌃, ⌥ or ⌘; Esc cancels, × clears.")
+            }
+
+            section("Keep Screen On", "sun.max") {
+                toggleRow("Also keep working with the lid closed", isOn: $keepAwakeLidClosed) { on in
+                    Store.keepAwakeLidClosed = on
+                }
+                footnote("Adds a stronger sleep assertion so a backup or render survives shutting the lid. Off by default — it changes power behaviour; best on AC power. Takes effect next time you start Keep Screen On.")
             }
 
             section("Clean Screen", "rectangle.inset.filled") {
@@ -592,6 +630,16 @@ struct SettingsView: View {
         }
     }
 
+    /// Read the login-item status off-main — `SMAppService.status` is a
+    /// synchronous XPC call (a mach send-and-wait) that hung the main thread
+    /// when it ran in the view's @State initializer (App-Hang).
+    private func loadLaunchAtLogin() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let on = SMAppService.mainApp.status == .enabled
+            DispatchQueue.main.async { launchAtLogin = on }
+        }
+    }
+
     private func updateMole() {
         guard !moleUpdating else { return }
         moleUpdating = true
@@ -685,7 +733,7 @@ struct SettingsView: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "Brewfile"
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard CrashReporter.withoutAppHangTracking({ panel.runModal() }) == .OK, let url = panel.url else { return }
         brewBusy = true
         brewSnapshotStatus = NSLocalizedString("Exporting…", comment: "")
         Task {
@@ -707,7 +755,7 @@ struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard CrashReporter.withoutAppHangTracking({ panel.runModal() }) == .OK, let url = panel.url else { return }
         brewBusy = true
         brewSnapshotStatus = NSLocalizedString("Restoring — installing from your Brewfile can take a while…", comment: "")
         Task {
@@ -873,6 +921,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var menuBarMetricsEditor: some View {
         VStack(spacing: 4) {
+            if !menuBarItems.isEmpty { menuBarPreview }
             if menuBarItems.isEmpty {
                 Text(NSLocalizedString("No metrics yet — add one below.", comment: ""))
                     .font(Brand.sans(11)).foregroundStyle(Brand.textTertiary)
@@ -889,7 +938,7 @@ struct SettingsView: View {
                 .background(RoundedRectangle(cornerRadius: 8)
                     .fill(expandedMenuBarItem == item.id ? Brand.cardFill : Color.clear))
             }
-            HStack {
+            HStack(spacing: 12) {
                 Menu {
                     ForEach(MenuBarMetric.allCases) { m in
                         Button { addMenuBarMetric(m) } label: { Label(m.title, systemImage: m.glyph) }
@@ -899,11 +948,95 @@ struct SettingsView: View {
                         .font(Brand.sans(12)).foregroundStyle(Brand.green)
                 }
                 .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    ForEach(Self.menuBarPresets, id: \.name) { preset in
+                        Button(preset.name) { applyMenuBarPreset(preset.items) }
+                    }
+                } label: {
+                    Label(NSLocalizedString("Presets", comment: ""), systemImage: "square.grid.2x2")
+                        .font(Brand.sans(12)).foregroundStyle(Brand.textSecondary)
+                }
+                .menuStyle(.borderlessButton).fixedSize()
                 Spacer()
             }
             .padding(.top, 2)
         }
         .padding(.vertical, 4)
+    }
+
+    /// Live preview of the configured row, rendered with the real sampler values
+    /// (refreshed ~1 s) so it matches what's actually in the menu bar.
+    private var menuBarPreview: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack {
+                Spacer()
+                if let img = MenuBarRenderer.image(items: menuBarItems, values: liveMenuBarValues) {
+                    Image(nsImage: img)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Brand.cardFill))
+                }
+                Spacer()
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    /// The real values the menu-bar row would draw, from the running sampler;
+    /// falls back to representative numbers before the first sample.
+    private var liveMenuBarValues: MenuBarMetricValues {
+        guard let live = AppDelegate.shared?.producer?.live else { return Self.menuBarPreviewValues }
+        var v = MenuBarMetricValues()
+        if let s = live.lastSnapshot {
+            v.primary[.cpu] = s.cpu.usage
+            v.primary[.memory] = s.memory.usedPercent
+            if let g = s.gpu?.first, g.usage >= 0 { v.primary[.gpu] = g.usage }
+            if let d = s.disks.first { v.primary[.diskUsage] = d.usedPercent }
+            if let t = s.thermal {
+                if t.fanSpeed > 0 || (t.fanCount ?? 0) > 0 { v.primary[.fan] = Double(t.fanSpeed) }
+                if let temp = t.bestTemp { v.primary[.temperature] = temp }
+                if t.systemPower > 0 { v.primary[.power] = t.systemPower }
+            }
+            if let b = s.batteries?.first {
+                v.primary[.battery] = b.percent
+                v.batteryCharging = b.status.lowercased().contains("charg")
+            }
+        }
+        v.primary[.network] = live.rxMBs; v.secondary[.network] = live.txMBs
+        v.primary[.diskIO]  = live.readMBs; v.secondary[.diskIO]  = live.writeMBs
+        v.memoryPressurePercent = MemoryPressure.percent()
+        return v
+    }
+
+    /// Representative values for the Settings preview only.
+    private static let menuBarPreviewValues: MenuBarMetricValues = {
+        var v = MenuBarMetricValues()
+        v.primary = [.cpu: 42, .memory: 68, .gpu: 31, .diskUsage: 55, .network: 8.4,
+                     .diskIO: 3.1, .fan: 2200, .temperature: 74, .battery: 86, .power: 14]
+        v.secondary = [.network: 1.2, .diskIO: 0.6]
+        v.histories = [.cpu: [30, 44, 38, 52, 42], .memory: [60, 63, 66, 68],
+                       .gpu: [18, 26, 31], .network: [4, 7, 8.4, 6, 8.4],
+                       .diskIO: [1, 2.4, 3.1], .power: [10, 12, 14, 13, 14]]
+        return v
+    }()
+
+    /// One-click starting layouts for the metric row.
+    private struct MenuBarPreset { let name: String; let items: [MenuBarItem] }
+    private static let menuBarPresets: [MenuBarPreset] = [
+        .init(name: NSLocalizedString("CPU · RAM", comment: ""),
+              items: [MenuBarItem(metric: .cpu, style: .value),
+                      MenuBarItem(metric: .memory, style: .value, color: .pressure)]),
+        .init(name: NSLocalizedString("CPU · RAM · Net · Disk", comment: ""),
+              items: [MenuBarItem(metric: .cpu, style: .value),
+                      MenuBarItem(metric: .memory, style: .value, color: .pressure),
+                      MenuBarItem(metric: .network, style: .speed), MenuBarItem(metric: .diskUsage, style: .bar)]),
+        .init(name: NSLocalizedString("Everything", comment: ""),
+              items: MenuBarMetric.allCases.map { MenuBarItem(metric: $0, style: $0.styles.first ?? .value, color: $0.defaultColor) }),
+    ]
+
+    private func applyMenuBarPreset(_ items: [MenuBarItem]) {
+        menuBarItems = items
+        expandedMenuBarItem = nil
+        commitMenuBarItems()
     }
 
     private func menuBarMetricRow(index idx: Int, item: MenuBarItem) -> some View {
@@ -948,7 +1081,7 @@ struct SettingsView: View {
                 }
             }
             optionPicker("Color", value: item.color.title) {
-                ForEach(MenuBarColorMode.allCases) { c in
+                ForEach(item.metric.colorModes) { c in
                     Button(c.title) { updateMenuBarItem(idx) { $0.color = c } }
                 }
             }
@@ -1005,7 +1138,7 @@ struct SettingsView: View {
     }
 
     private func addMenuBarMetric(_ m: MenuBarMetric) {
-        menuBarItems.append(MenuBarItem(metric: m, style: m.styles.first ?? .value))
+        menuBarItems.append(MenuBarItem(metric: m, style: m.styles.first ?? .value, color: m.defaultColor))
         commitMenuBarItems()
     }
 
@@ -1139,26 +1272,32 @@ struct SettingsView: View {
     // MARK: - Status labels
 
     private func refreshStatusLabels() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory,
-                                               in: .userDomainMask).first!
-            .appendingPathComponent("Burrow", isDirectory: true)
-        var total: Int64 = 0
-        if let enumerator = FileManager.default.enumerator(at: support,
-                                                           includingPropertiesForKeys: [.fileSizeKey]) {
-            for case let url as URL in enumerator {
-                if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
-                    total += Int64(size)
-                }
-            }
-        }
-        self.dbSizeText = Fmt.bytes(total)
-
+        // The maintenance label is cheap (in-memory) — set it synchronously.
         if let last = AppDelegate.shared?.maintenance?.lastRunAt {
             let delta = Int(Date().timeIntervalSince(last))
             self.lastMaintenanceText = String(format: NSLocalizedString("%ds ago · pruned %d rows", comment: ""),
                                               delta, AppDelegate.shared?.maintenance?.lastPruneDeleted ?? 0)
         } else {
             self.lastMaintenanceText = NSLocalizedString("not yet run", comment: "")
+        }
+        // Sizing the support dir walks every file under it (the metrics SQLite
+        // store grows large over time) — off the main thread so opening
+        // Settings can't hang on a deep enumeration (App-Hang).
+        DispatchQueue.global(qos: .utility).async {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                   in: .userDomainMask).first!
+                .appendingPathComponent("Burrow", isDirectory: true)
+            var total: Int64 = 0
+            if let enumerator = FileManager.default.enumerator(at: support,
+                                                               includingPropertiesForKeys: [.fileSizeKey]) {
+                for case let url as URL in enumerator {
+                    if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+                        total += Int64(size)
+                    }
+                }
+            }
+            let text = Fmt.bytes(total)
+            DispatchQueue.main.async { self.dbSizeText = text }
         }
     }
 }

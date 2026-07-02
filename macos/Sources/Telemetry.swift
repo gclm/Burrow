@@ -62,23 +62,32 @@ enum Telemetry {
             ?? "https://us.i.posthog.com"
 
         // Crash reporting shares the opt-in flag; safe no-op if no DSN is set.
+        // Stays on the main thread so the crash handler installs at launch.
         CrashReporter.start(enabled: isEnabled)
 
         guard !apiKey.isEmpty else { return }  // unconfigured / dev build → no analytics
 
-        let config = PostHogConfig(projectToken: apiKey, host: host)
-        config.captureApplicationLifecycleEvents = false  // we emit our own lifecycle events
-        config.captureScreenViews = false                 // AppKit; no autocapture
-        config.optOut = !isEnabled                         // hard-mute the network when opted out
-        // Burrow uses no feature flags; preloading them would add an extra
-        // network call at every launch that TELEMETRY.md doesn't list.
-        config.preloadFeatureFlags = false
-        PostHogSDK.shared.setup(config)
-        configured = true
+        // PostHog schedules its periodic-flush Timer on whatever run loop `setup`
+        // runs on. Doing setup on the main thread put that timer on the MAIN run
+        // loop, so every flush ran on main and could hang the UI for >2 s
+        // (App-Hang BURROW-4S: __NSFireTimer → PostHogQueue.flush → take). Set up
+        // off-main so the queue and its timer never touch the main thread; events
+        // still flush by batch size and on quit (Telemetry.flush()).
+        DispatchQueue.global(qos: .utility).async {
+            let config = PostHogConfig(projectToken: apiKey, host: host)
+            config.captureApplicationLifecycleEvents = false  // we emit our own lifecycle events
+            config.captureScreenViews = false                 // AppKit; no autocapture
+            config.optOut = !isEnabled                         // hard-mute the network when opted out
+            // Burrow uses no feature flags; preloading them would add an extra
+            // network call at every launch that TELEMETRY.md doesn't list.
+            config.preloadFeatureFlags = false
+            PostHogSDK.shared.setup(config)
+            configured = true
 
-        guard isEnabled else { return }
-        registerSuperProperties()
-        capture("app_opened", ["cold_start": true])
+            guard isEnabled else { return }
+            registerSuperProperties()
+            capture("app_opened", ["cold_start": true])
+        }
     }
 
     /// Best-effort flush on quit so the final session's events aren't lost.

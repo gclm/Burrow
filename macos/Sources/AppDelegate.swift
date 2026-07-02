@@ -148,10 +148,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         maintenance.start()
 
         // Completion notices + opt-in smart reminders. The delegate must
-        // be set before any notification is delivered or clicked;
-        // authorization is requested lazily by the first actual post
-        // (BurrowNotifier), never here at launch. (Main-actor hop: the
-        // notifier is @MainActor, this delegate callback isn't.)
+        // be set before any notification is delivered or clicked.
+        // startReminders() also requests notification permission up front
+        // (when a notifying feature is on) so the grant is settled at launch,
+        // not mid-notification. (Main-actor hop: the notifier is @MainActor,
+        // this delegate callback isn't.)
         Task { @MainActor in
             UNUserNotificationCenter.current().delegate = BurrowNotifier.shared
             BurrowNotifier.shared.startReminders()
@@ -279,6 +280,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let view = OnboardingView(onFinish: { [weak self] in
             Store.onboardingCompleted = true
             Telemetry.capture("onboarding_completed")
+            // Settle notification permission now the user has finished setup —
+            // up front, before any completion notice or reminder needs it.
+            // (Hop to the main actor: the notifier is @MainActor, this
+            // SwiftUI callback isn't isolated.)
+            Task { @MainActor in BurrowNotifier.shared.requestAuthorizationForEnabledFeatures() }
             self?.onboardingWC?.close()
             self?.onboardingWC = nil
             self?.openMainWindow(initial: .home)
@@ -513,6 +519,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Standard About panel, with the engine version and the links that
     /// matter (repo, releases, telemetry disclosure) in the credits.
     func showAboutPanel() {
+        // `mo --version` spawns a subprocess — fetch it off-main, then build
+        // and present the panel on main (was a main-thread subprocess block).
+        DispatchQueue.global(qos: .userInitiated).async {
+            let version = MoleCLI.version().map { "v\($0)" } ?? NSLocalizedString("not found", comment: "")
+            DispatchQueue.main.async { self.presentAboutPanel(moleVersion: version) }
+        }
+    }
+
+    private func presentAboutPanel(moleVersion: String) {
         let credits = NSMutableAttributedString()
         let para = NSMutableParagraphStyle()
         para.alignment = .center
@@ -524,8 +539,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                   .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: para]
             credits.append(NSAttributedString(string: text + "\n", attributes: attrs))
         }
-        line(String(format: NSLocalizedString("Mole engine %@", comment: ""),
-                    MoleCLI.version().map { "v\($0)" } ?? NSLocalizedString("not found", comment: "")))
+        line(String(format: NSLocalizedString("Mole engine %@", comment: ""), moleVersion))
         line(NSLocalizedString("Source on GitHub", comment: ""), link: "https://github.com/caezium/Burrow")
         line(NSLocalizedString("Releases", comment: ""), link: "https://github.com/caezium/Burrow/releases")
         line(NSLocalizedString("What telemetry is collected", comment: ""),

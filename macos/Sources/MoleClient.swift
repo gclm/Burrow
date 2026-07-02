@@ -61,15 +61,4 @@ enum MoleClient {
         MoleHistory.load()
     }
 
-    /// A fresh system snapshot (`mo status --json`). Decodes to the typed model.
-    /// The periodic producer does NOT use this — it keeps the raw JSON to store +
-    /// patch — but one-shot readers can.
-    static func status(timeout: TimeInterval = 8) -> MoleStatus? {
-        guard let res = try? MoEngine.shared.capture(
-                MoCommand(target: .mo, args: ["status", "--json"], timeout: timeout)),
-              res.exitCode == 0,
-              let s = try? JSONDecoder().decode(MoleStatus.self, from: Data(res.stdout.utf8))
-        else { return nil }
-        return s
-    }
 }

@@ -19,12 +19,13 @@ import Foundation
 
 struct StartupItem: Identifiable, Equatable {
     enum Kind: Equatable {
-        case launchAgent, launchDaemon
+        case launchAgent, launchDaemon, loginItem
 
         var label: String {
             switch self {
             case .launchAgent:  return NSLocalizedString("Launch agent", comment: "startup kind")
             case .launchDaemon: return NSLocalizedString("Launch daemon", comment: "startup kind")
+            case .loginItem:    return NSLocalizedString("Login item", comment: "startup kind")
             }
         }
     }
@@ -57,11 +58,16 @@ struct StartupItem: Identifiable, Equatable {
 
     /// User-scope, not bundled in an app, and not broken — the only items
     /// Burrow can safely enable/disable without admin (launchctl in the
-    /// per-user gui domain). Everything else stays review-only.
-    var controllable: Bool { scope == .user && !bundledInApp && problem == nil }
+    /// per-user gui domain). Everything else stays review-only. Modern Login
+    /// (BTM) items aren't launchctl-toggleable — the owning app or System
+    /// Settings manages them — so they're never controllable.
+    var controllable: Bool { scope == .user && kind != .loginItem && !bundledInApp && problem == nil }
 
     /// The classification subline: kind + who manages it.
     var subline: String {
+        if kind == .loginItem {
+            return NSLocalizedString("Login item · System Settings manages it; review only", comment: "")
+        }
         let management = bundledInApp
             ? NSLocalizedString("Bundled inside an app; review only", comment: "")
             : (scope == .system
@@ -137,7 +143,13 @@ enum StartupInventory {
             ?? (dict["ProgramArguments"] as? [String])?.first
         var problem: StartupItem.Problem?
         if let exe = executable, !FileManager.default.fileExists(atPath: exe) {
-            problem = .danglingExecutable
+            // A target on an external drive that's currently UNPLUGGED isn't
+            // broken — don't flag it (PRD §Startup, RemovableVolumeGuard).
+            let mounted = Set((try? FileManager.default.contentsOfDirectory(atPath: "/Volumes"))?
+                .map { "/Volumes/\($0)" } ?? [])
+            if RemovableVolumeGuard.classify(missingPath: exe, mountedVolumes: mounted) == .broken {
+                problem = .danglingExecutable
+            }
         }
         return StartupItem(label: label, kind: kind, scope: scope,
                            plistPath: url.path, executable: executable, problem: problem)
@@ -154,7 +166,9 @@ enum StartupInventory {
     }
 
     /// The live no-admin inventory: user agents + world-readable system
-    /// agents/daemons.
+    /// agents/daemons. This is the stable baseline source — the StartupWatcher
+    /// diff (#8/#12) reads it, so it deliberately excludes the volatile BTM
+    /// layer (`scanLiveIncludingLoginItems` adds that for the UI only).
     static func scanLive() -> [StartupItem] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var items = scan(directory: home.appendingPathComponent("Library/LaunchAgents"),
@@ -164,5 +178,45 @@ enum StartupInventory {
         items += scan(directory: URL(fileURLWithPath: "/Library/LaunchDaemons"),
                       kind: .launchDaemon, scope: .system)
         return items
+    }
+
+    /// Merge modern Login/Background items (BTM, from `sfltool dumpbtm`) into the
+    /// plist-derived inventory, adding only those the LaunchAgent/Daemon scan
+    /// didn't already surface (PRD §Startup). Pure — the sfltool spawn lives in
+    /// `scanLiveIncludingLoginItems`. BTM items are review-only: toggling needs
+    /// the owning app or admin, so they never become `controllable`.
+    static func merge(plistItems: [StartupItem], login: [LoginItemsReader.Item]) -> [StartupItem] {
+        let known = Set(plistItems.map { $0.label.lowercased() })
+        // BTM identifiers carry a "<container#>." prefix, e.g.
+        // "16.com.henry.studio-route-guard" → "com.henry.studio-route-guard".
+        func normalized(_ id: String) -> String {
+            id.replacingOccurrences(of: #"^\d+\."#, with: "", options: .regularExpression).lowercased()
+        }
+        var extras: [StartupItem] = []
+        for li in login {
+            let norm = normalized(li.identifier)
+            // Skip placeholder container records and anything a plist covers.
+            if norm.isEmpty || li.identifier.lowercased() == "unknown developer" { continue }
+            if known.contains(norm) || known.contains(li.identifier.lowercased()) { continue }
+            extras.append(StartupItem(
+                label: li.name.isEmpty ? li.identifier : li.name,
+                kind: .loginItem, scope: .user,
+                plistPath: "btm:\(li.identifier)",   // synthetic, stable id
+                executable: nil, problem: nil))
+        }
+        let sortedExtras = extras.sorted {
+            $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending
+        }
+        return plistItems + sortedExtras
+    }
+
+    /// The inventory the Startup UI shows: `scanLive` plus modern Login items.
+    /// `sfltool dumpbtm` needs root for the full list, so unelevated this just
+    /// returns the plist inventory (graceful) rather than failing.
+    static func scanLiveIncludingLoginItems() -> [StartupItem] {
+        let base = scanLive()
+        let dump = (try? MoEngine.shared.capture(
+            MoCommand(target: .executable("/usr/bin/sfltool"), args: ["dumpbtm"], timeout: 10)).stdout) ?? ""
+        return merge(plistItems: base, login: LoginItemsReader.parse(dump))
     }
 }

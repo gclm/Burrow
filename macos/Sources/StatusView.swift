@@ -18,11 +18,17 @@ import AppKit
 /// The Overview section of Home: live metric cards + the process table.
 struct StatusView: View {
     @StateObject private var model: StatusModel
-    @ObservedObject private var io: LiveFeed
+    /// The 1 Hz live feed. Deliberately NOT `@ObservedObject` here: only the
+    /// small Disk / Net cards observe it (`LiveDiskCard` / `LiveNetCard`), so a
+    /// per-second rate/ring tick re-renders just those two tiles instead of the
+    /// whole dashboard — every chart tile AND the 100-row process table — every
+    /// second. That StatusView-wide 1 Hz invalidation was the App-Hang fan-out
+    /// (BURROW-4x: layout/AttributeGraph churn, per-row Menus rebuilt at 1 Hz).
+    private let live: LiveFeed
 
     init(db: DB, live: LiveFeed, feeds: FeedHub) {
         _model = StateObject(wrappedValue: StatusModel(db: db, live: live, feeds: feeds))
-        self.io = live
+        self.live = live
     }
 
     private let row1H: CGFloat = 162
@@ -40,10 +46,12 @@ struct StatusView: View {
                         gpuTile(s).frame(minHeight: row1H)
                     }
                     HStack(spacing: 16) {
-                        DiskCard(s: s, liveRead: io.readMBs, liveWrite: io.writeMBs, minHeight: row2H, db: model.db)
-                        netTile(s).frame(minHeight: row2H)
+                        LiveDiskCard(s: s, io: live, minHeight: row2H, db: model.db)
+                        LiveNetCard(s: s, io: live, fallbackRx: model.netRxHist, fallbackTx: model.netTxHist)
+                            .frame(minHeight: row2H)
                         fanTile(s).frame(minHeight: row2H)
                     }
+                    memoryDetail(s)
                     // Battery card carries the ring gauges (Mac + connected
                     // Bluetooth devices) — the old standalone BT strip folded in.
                     BatteryCard(s: s, minHeight: row2H)
@@ -82,6 +90,39 @@ struct StatusView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Memory detail (the full breakdown the small tile can't show)
+
+    private func memoryDetail(_ s: MoleStatus) -> some View {
+        let m = s.memory
+        let lvl = MemoryPressure.percent()
+        let free = m.available ?? (m.total > m.used ? m.total - m.used : 0)
+        return HStack(alignment: .center, spacing: 22) {
+            HStack(spacing: 6) {
+                Image(systemName: "memorychip").font(.system(size: 12)).foregroundStyle(MemoryPressure.tint(percent: lvl))
+                Text(NSLocalizedString("Memory", comment: "")).font(Brand.mono(10, .semibold)).foregroundStyle(Brand.textSecondary)
+            }
+            memStat(NSLocalizedString("Used", comment: ""), String(format: "%.1f GB", Fmt.gib(m.used)), MemoryPressure.tint(percent: lvl))
+            memStat(NSLocalizedString("Free", comment: ""), String(format: "%.1f GB", Fmt.gib(free)), Brand.textPrimary)
+            if let c = m.cached, c > 0 {
+                memStat(NSLocalizedString("Cached", comment: ""), String(format: "%.1f GB", Fmt.gib(c)), Brand.textPrimary)
+            }
+            memStat(NSLocalizedString("Swap", comment: ""),
+                    String(format: "%.1f / %.0f GB", Fmt.gib(m.swapUsed), Fmt.gib(m.swapTotal)),
+                    m.swapUsed > 0 ? MemoryPressure.tint(percent: lvl) : Brand.textPrimary)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Brand.cardFill))
+    }
+
+    private func memStat(_ label: String, _ value: String, _ valueColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(Brand.mono(9)).foregroundStyle(Brand.textTertiary)
+            Text(value).font(Brand.mono(13, .semibold)).foregroundStyle(valueColor)
+        }
+    }
+
     // MARK: - Tiles built from the snapshot
 
     private func cpuTile(_ s: MoleStatus) -> ValueTile {
@@ -100,16 +141,15 @@ struct StatusView: View {
 
     private func memTile(_ s: MoleStatus) -> ValueTile {
         let m = s.memory
-        let label = m.pressure.isEmpty ? "normal" : m.pressure.lowercased()
-        let color: Color = label == "normal" ? Brand.textSecondary : (label == "warning" ? Brand.orange : Brand.red)
+        let lvl = MemoryPressure.percent()
         let used = Fmt.gib(m.used)
         let total = Fmt.gib(m.total)
         return ValueTile(
-            eyebrow: "Memory", glyph: "memorychip", accent: Brand.amber,
+            eyebrow: "Memory", glyph: "memorychip", accent: MemoryPressure.tint(percent: lvl),
             value: String(format: "%.0f", m.usedPercent), unit: "%",
-            chip: (label, color), values: model.memHist, chartStyle: .area,
-            footnote: String(format: NSLocalizedString("%.1f / %.1f GB · swap %.1f GB", comment: ""),
-                             used, total, Fmt.gib(m.swapUsed)))
+            chip: (String(format: NSLocalizedString("%d%%", comment: ""), lvl), MemoryPressure.tint(percent: lvl)),
+            values: model.memHist, chartStyle: .area,
+            footnote: String(format: NSLocalizedString("%.1f / %.1f GB · swap %.1f GB", comment: ""), used, total, Fmt.gib(m.swapUsed)))
     }
 
     private func gpuTile(_ s: MoleStatus) -> ValueTile {
@@ -171,7 +211,31 @@ struct StatusView: View {
         }
     }
 
-    private func netTile(_ s: MoleStatus) -> ValueTile {
+}
+
+/// Disk tile that observes the 1 Hz `LiveFeed` HERE (not in StatusView), so a
+/// per-second throughput tick re-renders only this tile.
+struct LiveDiskCard: View {
+    let s: MoleStatus
+    @ObservedObject var io: LiveFeed
+    var minHeight: CGFloat? = nil
+    var db: DB? = nil
+    var body: some View {
+        DiskCard(s: s, liveRead: io.readMBs, liveWrite: io.writeMBs, minHeight: minHeight, db: db)
+    }
+}
+
+/// Network tile that observes the 1 Hz `LiveFeed` HERE, for the same reason —
+/// the per-second rate/ring updates stay scoped to this tile rather than
+/// invalidating the whole dashboard.
+struct LiveNetCard: View {
+    let s: MoleStatus
+    @ObservedObject var io: LiveFeed
+    /// Sparkline fallback for the first tick, before the 1 s ring has samples.
+    var fallbackRx: [Double] = []
+    var fallbackTx: [Double] = []
+
+    var body: some View {
         let snapNet = s.network.first(where: { !$0.ip.isEmpty }) ?? s.network.first
         // Prefer the native 1 s monitor (catches bursts the mo poll misses); the
         // mo snapshot is the fallback before the monitor has any samples.
@@ -185,8 +249,8 @@ struct StatusView: View {
         // Two lines, one scale: download (green, ↓) and upload (blue, ↑) —
         // matching the ↓/↑ figures in the footnote. Tile window = the recent
         // 2 min of the 1 s ring; longer windows live in the History tab.
-        let rxHist = useLive ? io.netRxHistory(lastSeconds: 120) : model.netRxHist
-        let txHist = useLive ? io.netTxHistory(lastSeconds: 120) : model.netTxHist
+        let rxHist = useLive ? io.netRxHistory(lastSeconds: 120) : fallbackRx
+        let txHist = useLive ? io.netTxHistory(lastSeconds: 120) : fallbackTx
         return ValueTile(
             eyebrow: "Network", glyph: "network", accent: Brand.green,
             value: value, unit: unit, chip: chip,
@@ -519,6 +583,8 @@ struct ProcessCard: View {
     /// that bounded; "Show all" opts back into the full list.
     private static let rowCap = 100
     @State private var showAll = false
+    @State private var inspecting: ProcessInspectTarget?
+    @State private var showTree = false
 
     var body: some View {
         let all = model.sortedRows
@@ -526,6 +592,8 @@ struct ProcessCard: View {
         let hidden = all.count - rows.count
         return GlassCard(padding: 0) {
             VStack(spacing: 0) {
+                filterBar
+                Rectangle().fill(Brand.hairline).frame(height: 1)
                 header(count: all.count)
                 Rectangle().fill(Brand.hairline).frame(height: 1)
                 // The table scrolls on its own, under a sticky header,
@@ -538,7 +606,8 @@ struct ProcessCard: View {
                         ForEach(rows, id: \.pid) { p in
                             ProcRow(p: p,
                                     pinned: model.pinned.contains(p.pid),
-                                    energy: model.energies[p.pid]) {
+                                    energy: model.energies[p.pid],
+                                    onInspect: { inspecting = ProcessInspectTarget(proc: p) }) {
                                 model.togglePin(p.pid)
                             }
                         }
@@ -549,6 +618,12 @@ struct ProcessCard: View {
                 .scrollIndicators(.automatic)
                 .frame(height: 195)
             }
+        }
+        .sheet(item: $inspecting) { target in
+            ProcessInspectorView(proc: target.proc, processes: model.processes)
+        }
+        .sheet(isPresented: $showTree) {
+            ProcessTreeView(processes: model.processes)
         }
     }
 
@@ -566,6 +641,28 @@ struct ProcessCard: View {
         .accessibilityLabel(NSLocalizedString("Show all processes", comment: ""))
     }
 
+    /// Typed filter bar (PRD §α): "cpu > 20", "name ~ chrome", or a bare term
+    /// for name-contains. Recomputes the sorted rows as you type.
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
+            TextField(NSLocalizedString("Filter — e.g. cpu > 20, name ~ chrome", comment: ""),
+                      text: Binding(get: { model.filterText }, set: { model.setFilter($0) }))
+                .textFieldStyle(.plain)
+                .font(Brand.mono(11)).foregroundStyle(Brand.textPrimary)
+            if !model.filterText.isEmpty {
+                Button { model.setFilter("") } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("Clear filter", comment: ""))
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 7)
+    }
+
     private func header(count: Int) -> some View {
         HStack(spacing: 10) {
             sortButton(String(format: NSLocalizedString("NAME (%d)", comment: ""), count), .name)
@@ -574,10 +671,39 @@ struct ProcessCard: View {
             sortButton("CPU", .cpu).frame(width: 92, alignment: .trailing)
             sortButton("PWR", .pwr).frame(width: 44, alignment: .trailing)
             sortButton("MEM", .mem).frame(width: 64, alignment: .trailing)
-            Color.clear.frame(width: 20)   // the … column
+            exportMenu   // aligns with the per-row … column
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
+    }
+
+    /// Table-level actions (PRD §α Process Inspector): a process-tree view and
+    /// export of the current (sorted) set to the clipboard. Threads aren't in
+    /// the `ps` sample → 0.
+    private var exportMenu: some View {
+        Menu {
+            Button(NSLocalizedString("Process Tree…", comment: "")) { showTree = true }
+            Divider()
+            Button(NSLocalizedString("Copy as CSV", comment: "")) { copyExport(asCSV: true) }
+            Button(NSLocalizedString("Copy as JSON", comment: "")) { copyExport(asCSV: false) }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 11)).foregroundStyle(Brand.textTertiary)
+                .frame(width: 20, height: 20).contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
+        .help(NSLocalizedString("Process tree and export", comment: ""))
+        .accessibilityLabel(NSLocalizedString("Process tree and export", comment: ""))
+    }
+
+    private func copyExport(asCSV: Bool) {
+        let rows = model.sortedRows.map {
+            ProcessExport.Row(pid: $0.pid, name: $0.name, cpu: $0.cpu,
+                              memBytes: Int64($0.memoryBytes ?? 0), threads: 0)
+        }
+        let text = asCSV ? ProcessExport.csv(rows) : ProcessExport.json(rows)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func sortButton(_ title: String, _ key: ProcSort) -> some View {
@@ -601,6 +727,7 @@ struct ProcRow: View {
     let pinned: Bool
     /// Cumulative billed energy (nJ) — nil renders "—", never estimated.
     var energy: UInt64? = nil
+    var onInspect: () -> Void = {}
     let onPin: () -> Void
     @State private var hover = false
 
@@ -657,11 +784,14 @@ struct ProcRow: View {
     private enum L {
         static let pin = NSLocalizedString("Pin", comment: "")
         static let unpin = NSLocalizedString("Unpin", comment: "")
+        static let inspect = NSLocalizedString("Inspect…", comment: "")
         static let reveal = NSLocalizedString("Reveal in Finder", comment: "")
         static let copyName = NSLocalizedString("Copy name", comment: "")
         static let copyPID = NSLocalizedString("Copy PID", comment: "")
         static let quit = NSLocalizedString("Quit…", comment: "")
         static let forceKill = NSLocalizedString("Force Kill…", comment: "")
+        static let suspend = NSLocalizedString("Suspend", comment: "")
+        static let resume = NSLocalizedString("Resume", comment: "")
     }
 
     /// Per-row "…" menu: pin, reveal, copy; Quit / Force Kill for
@@ -669,6 +799,8 @@ struct ProcRow: View {
     private var rowMenu: some View {
         Menu {
             Button(pinned ? L.unpin : L.pin) { onPin() }
+            Button(L.inspect) { onInspect() }
+            Divider()
             Button(L.reveal) {
                 if let path = ProcessActions.executablePath(pid: p.pid) {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
@@ -684,6 +816,9 @@ struct ProcRow: View {
             }
             if ProcessActions.isOwnProcess(pid: p.pid) {
                 Divider()
+                // Suspend/Resume are reversible (SIGSTOP/SIGCONT) — no confirm.
+                Button(L.suspend) { ProcessActions.suspend(pid: p.pid) }
+                Button(L.resume) { ProcessActions.resume(pid: p.pid) }
                 Button(L.quit, role: .destructive) { confirmQuit(force: false) }
                 Button(L.forceKill, role: .destructive) { confirmQuit(force: true) }
             }
@@ -858,10 +993,15 @@ final class StatusModel: ObservableObject {
     /// re-evaluates `ProcessCard.body` no longer re-sorts hundreds of rows
     /// on the main thread (Sentry BURROW-1 / BURROW-N App Hang).
     @Published var sortedRows: [ProcessInfo] = []
+    /// Typed predicate filter over the table (PRD §α), e.g. "cpu > 20" or
+    /// "name ~ chrome". Empty = no filter. Parsed once per change, not per row.
+    @Published var filterText: String = ""
 
     let db: DB
     private let live: LiveFeed
     private let feeds: FeedHub
+    /// Opt-in per-process CPU watchdog (PRD §α). Inert until enabled in Settings.
+    private let watchdog = ProcessWatchdog()
 
     init(db: DB, live: LiveFeed, feeds: FeedHub) {
         self.db = db
@@ -934,6 +1074,10 @@ final class StatusModel: ObservableObject {
             processes = v.processes
             energies = v.energies
             recomputeSortedRows()
+            // Opt-in watchdog: evaluate this tick, dispatch any new firings.
+            for f in watchdog.step(processes: v.processes, cadenceSeconds: 2) {
+                watchdog.dispatch(pid: f.pid, name: f.name)
+            }
         }
     }
 
@@ -948,13 +1092,26 @@ final class StatusModel: ObservableObject {
         recomputeSortedRows()
     }
 
+    func setFilter(_ text: String) {
+        guard text != filterText else { return }
+        filterText = text
+        recomputeSortedRows()
+    }
+
     /// Re-sort the table from the current inputs and publish the result into
     /// `sortedRows`. O(n log n) over a few hundred rows, but run once per
     /// real change instead of once per `ProcessCard.body` evaluation — the
     /// body now just reads the cached array. Must run on the main actor (it
     /// mutates a `@Published`); every caller already does.
     func recomputeSortedRows() {
-        let procs = processes.isEmpty ? (snap?.topProcesses ?? []) : processes
+        var procs = processes.isEmpty ? (snap?.topProcesses ?? []) : processes
+        if let pred = ProcessFilter.parse(filterText) {
+            procs = procs.filter {
+                ProcessFilter.matches(ProcessFilter.Record(
+                    pid: $0.pid, name: $0.name, cpu: $0.cpu,
+                    memBytes: Int64($0.memoryBytes ?? 0), threads: 0), pred)
+            }
+        }
         let sorted = procs.sorted { a, b in
             switch sortKey {
             case .name: return sortAsc ? a.name < b.name : a.name > b.name
