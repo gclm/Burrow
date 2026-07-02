@@ -25,10 +25,6 @@ final class EventHub {
         startKeepAlive()
     }
 
-    func deregister(_ conn: NWConnection) {
-        lock.lock(); conns[ObjectIdentifier(conn)] = nil; lock.unlock()
-    }
-
     /// Is this connection an active event stream? The query server uses this
     /// to exempt /events connections from its short idle-cancel timeout.
     func isStreaming(_ conn: NWConnection) -> Bool {

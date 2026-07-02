@@ -289,8 +289,6 @@ struct MenuBarMetricValues {
     /// Current macOS memory-pressure level (`kern.memorystatus_vm_pressure_level`):
     /// 1 = normal, 2 = warning, 4 = critical. Drives the "By pressure" colour.
     var memoryPressurePercent: Int = 0
-
-    func has(_ m: MenuBarMetric) -> Bool { primary[m] != nil }
 }
 
 /// Memory pressure as a percentage + colour, matching Activity Monitor / iStat
