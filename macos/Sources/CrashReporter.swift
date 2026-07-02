@@ -99,10 +99,37 @@ enum CrashReporter {
             // path is the diagnostic part.
             options.beforeSend = { event in
                 scrubUserPaths(event)
+                // App-hang (ANR) events fan out badly: one main-thread freeze
+                // gets fingerprinted by whatever frame the sampler caught
+                // (malloc/swift_retain/layout internals), exploding a single
+                // hang into dozens of distinct issues that drained the whole
+                // error quota (all 81 issues were "App hanging"). Collapse them
+                // into one issue and sample the volume down so a hang storm
+                // can't exhaust the quota again — we only need to know that
+                // hangs are happening, not to log every event of the same one.
+                if isAppHang(event) {
+                    event.fingerprint = ["burrow-app-hang"]
+                    if Double.random(in: 0..<1) >= appHangKeepRate { return nil }
+                }
                 return event
             }
         }
         running = true
+    }
+
+    /// Fraction of App Hang events kept after fingerprint-collapse. Enough to
+    /// confirm hangs are still happening without letting a burst drain quota.
+    private static let appHangKeepRate = 0.05
+
+    /// True for Sentry app-hang (ANR) events. The Cocoa SDK tags them with an
+    /// exception mechanism whose `type` begins with "AppHang" (V1 "AppHang",
+    /// V2 "AppHangFullyBlocked"/"AppHangNonFullyBlocked") and an exception
+    /// `type` of "App Hanging".
+    private static func isAppHang(_ event: Event) -> Bool {
+        (event.exceptions ?? []).contains { ex in
+            (ex.mechanism?.type.hasPrefix("AppHang") ?? false)
+                || ex.type == "App Hanging"
+        }
     }
 
     /// Replace `/Users/<name>` with a placeholder in every path-bearing
