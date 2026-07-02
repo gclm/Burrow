@@ -15,7 +15,9 @@ cask "burrow" do
   desc "Free, open-source native GUI for the Mole CLI"
   homepage "https://github.com/caezium/Burrow"
 
-  depends_on formula: "mole"
+  # No `depends_on formula: "mole"`: since 0.9.0 Burrow bundles its own MIT
+  # engine (the burrow-engine fork, pinned at mo's last MIT release) inside the
+  # app, so a separate `mole` install is no longer required to run.
   # Homebrew 5.1.11 (May 2026) changed `depends_on macos: :sonoma` from
   # "exactly Sonoma" to "Sonoma or newer" and deprecated the `">= :sonoma"`
   # string form (a hard error under HOMEBREW_DEVELOPER). Branch so both old
