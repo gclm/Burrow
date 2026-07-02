@@ -37,7 +37,7 @@ struct SettingsView: View {
     /// Wired by AppDelegate; the only consumer is "Run maintenance now".
     var onRunMaintenance: (() -> Void)?
     /// Esc leaves Settings (RootView returns to the previous pane). The
-    /// pane has no close chrome of its own — navigation lives in TopNav.
+    /// pane has no close chrome of its own — navigation lives in the floating rail.
     var onClose: (() -> Void)?
 
     @State private var tab: Tab = .general
