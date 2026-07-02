@@ -29,7 +29,16 @@ final class HUDController: NSViewController {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     private var maxHeight: CGFloat {
-        max(360, (NSScreen.main?.visibleFrame.height ?? 800) - 28)
+        // Cap to the display the popover is ACTUALLY on, not `NSScreen.main`
+        // (the key-window screen — for a menu-bar app clicking a status item
+        // on a secondary display there's often no key window, so `.main`
+        // returns the primary). On a shorter secondary display that would size
+        // the HUD taller than the screen and run it off the bottom edge — the
+        // exact overflow this cap exists to prevent. `view.window` is the
+        // popover's own window once shown; fall back to `.main` on the first
+        // layout pass before it's attached (a later pass corrects it).
+        let screen = view.window?.screen ?? NSScreen.main
+        return max(360, (screen?.visibleFrame.height ?? 800) - 28)
     }
 
     override func loadView() {
