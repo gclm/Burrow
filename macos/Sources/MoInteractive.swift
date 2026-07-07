@@ -70,18 +70,27 @@ enum MoTUI {
         Set(screen.items.enumerated().filter { $0.element.selected }.map { $0.offset })
     }
 
-    /// Keystrokes to take a FRESH list (cursor at item 0, everything ○) to
-    /// exactly `wanted` checked. Walks every item top-to-bottom once,
-    /// pressing Space only on wanted ones — deterministic, no cursor math.
-    /// `confirm` appends Enter. Does NOT confirm an empty selection.
-    static func keystrokesToSelect(_ wanted: Set<Int>, count: Int, confirm: Bool) -> [UInt8] {
+    /// Keystrokes to drive the list from its CURRENT checked state to exactly
+    /// `wanted` checked. Walks every item top-to-bottom once (cursor starts at
+    /// row 0), pressing Space only on rows whose current state differs from
+    /// what's wanted — deterministic, no cursor math. `current` is the set of
+    /// rows already checked (●); pass [] for a fresh all-unchecked list.
+    ///
+    /// Toggling the *difference* (not blindly Space-ing `wanted`) is what makes
+    /// this work for `mo purge`, whose list renders with most rows PRE-SELECTED
+    /// by default — the old "everything starts ○" assumption left those defaults
+    /// checked, so the on-screen selection never matched what the user picked and
+    /// the safety guard aborted every purge ("Couldn't confirm the selection
+    /// safely"). `installer` starts all-○, so `current: []` reproduces the old
+    /// behavior there. `confirm` appends Enter. Does NOT confirm an empty selection.
+    static func keystrokesToSelect(_ wanted: Set<Int>, count: Int, currentlySelected current: Set<Int> = [], confirm: Bool) -> [UInt8] {
         let down: [UInt8] = [0x1b, 0x5b, 0x42]   // ESC [ B
         let space: UInt8 = 0x20
         let enter: UInt8 = 0x0d
         var out: [UInt8] = []
         guard count > 0 else { return out }
         for i in 0..<count {
-            if wanted.contains(i) { out.append(space) }
+            if wanted.contains(i) != current.contains(i) { out.append(space) }  // toggle only where state must change
             if i < count - 1 { out.append(contentsOf: down) }
         }
         if confirm && !wanted.isEmpty { out.append(enter) }

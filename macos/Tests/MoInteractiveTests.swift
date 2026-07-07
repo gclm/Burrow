@@ -75,6 +75,24 @@ final class MoInteractiveTests: XCTestCase {
         XCTAssertEqual(MoTUI.keystrokesToSelect([0, 1, 2], count: 3, confirm: true), expected)
     }
 
+    func testKeystrokes_togglesDeltaAgainstPreselectedList() {
+        // `mo purge` renders rows PRE-SELECTED. Here rows {0, 2} start checked
+        // (●) and the user wants only row {1}. The plan must UNcheck 0, CHECK 1,
+        // and UNcheck 2 — a Space on every row — not just Space the wanted row
+        // (which would leave 0 and 2 checked → the "12/2 toggled" abort). #231
+        let down: [UInt8] = [0x1b, 0x5b, 0x42]
+        let space: [UInt8] = [0x20]
+        let expected = space + down + space + down + space
+        XCTAssertEqual(MoTUI.keystrokesToSelect([1], count: 3, currentlySelected: [0, 2], confirm: false), expected)
+    }
+
+    func testKeystrokes_noOpWhenCurrentAlreadyMatchesWanted() {
+        // Already exactly what's wanted → no Space presses, just the walk's Downs.
+        let down: [UInt8] = [0x1b, 0x5b, 0x42]
+        XCTAssertEqual(MoTUI.keystrokesToSelect([1, 2], count: 3, currentlySelected: [1, 2], confirm: false),
+                       down + down)
+    }
+
     // A real `mo purge` frame: rows are "<project path>  <size> | <category> | <age>",
     // the header carries "[1/53]" (53 total, but Mole renders far fewer).
     private let purgeFrame = """
