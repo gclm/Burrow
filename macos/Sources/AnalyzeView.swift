@@ -298,16 +298,31 @@ struct TreemapView: View {
 // MARK: - Icons / Finder helpers
 
 enum AnalyzeIcons {
-    private static var cache: [String: NSImage] = [:]
+    // NSCache, not a plain dict: keyed by full path it would otherwise retain an
+    // NSImage for every file ever shown for the process lifetime. NSCache evicts
+    // under memory pressure and honors the count cap. #236
+    private static let cache: NSCache<NSString, NSImage> = {
+        let c = NSCache<NSString, NSImage>()
+        c.countLimit = 512
+        return c
+    }()
     static func icon(for e: DiskScanEntry) -> NSImage {
-        if let c = cache[e.path] { return c }
+        if let c = cache.object(forKey: e.path as NSString) { return c }
         let img = NSWorkspace.shared.icon(forFile: e.path)
-        cache[e.path] = img
+        cache.setObject(img, forKey: e.path as NSString)
         return img
     }
     static func reveal(_ path: String) {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
+}
+
+/// Boxed walk result so the path→walk cache can be an NSCache (needs a class
+/// value); lets it stay bounded and evict under memory pressure. #236
+final class CachedWalk {
+    let entries: [DiskScanEntry]
+    let total: Int64
+    init(entries: [DiskScanEntry], total: Int64) { self.entries = entries; self.total = total }
 }
 
 // MARK: - Model
@@ -348,7 +363,14 @@ final class AnalyzeModel: ObservableObject {
     /// Cache scan results by path so navigating back/into already-seen
     /// folders is instant instead of re-running `mo analyze` (~4 CPU-s)
     /// each time. Refresh clears the current path to force a fresh walk.
-    private var cache: [String: (entries: [DiskScanEntry], total: Int64)] = [:]
+    // NSCache (bounded, auto-evicting) rather than an ever-growing dict: browsing
+    // deep trees / whole-disk analyze would otherwise retain a DiskScanEntry array
+    // for every directory ever visited for the model's lifetime. #236
+    private let cache: NSCache<NSString, CachedWalk> = {
+        let c = NSCache<NSString, CachedWalk>()
+        c.countLimit = 256
+        return c
+    }()
 
     var summaryLine: String {
         entries.isEmpty ? "—" : String(format: NSLocalizedString("%d items · %@", comment: ""), entries.count, Fmt.bytes(total))
@@ -376,7 +398,7 @@ final class AnalyzeModel: ObservableObject {
 
     func refresh() {
         guard let last = crumbs.last else { return }
-        cache[last.path] = nil   // drop the cached walk so we re-scan
+        cache.removeObject(forKey: last.path as NSString)   // drop the cached walk so we re-scan
         scan(last.path, name: last.name, push: false, force: true)
     }
 
@@ -424,7 +446,7 @@ final class AnalyzeModel: ObservableObject {
             try FileManager.default.trashItem(at: URL(fileURLWithPath: e.path), resultingItemURL: nil)
             entries.removeAll { $0.id == e.id }
             total = max(0, total - e.size)
-            if let last = crumbs.last { cache[last.path] = nil }
+            if let last = crumbs.last { cache.removeObject(forKey: last.path as NSString) }
         } catch {
             let err = NSAlert()
             err.messageText = NSLocalizedString("Couldn't move to Trash", comment: "")
@@ -447,7 +469,7 @@ final class AnalyzeModel: ObservableObject {
         let gen = scanGen
         // Cache hit → show instantly; don't re-run `mo analyze` for a
         // folder we already walked (back/drill is the common navigation).
-        if !force, let cached = cache[path] {
+        if !force, let cached = cache.object(forKey: path as NSString) {
             entries = cached.entries; total = cached.total; loading = false; error = nil
             return
         }
@@ -465,14 +487,15 @@ final class AnalyzeModel: ObservableObject {
                 } cacheChild: { childPath, result in
                     Task { @MainActor in
                         // Pre-warm drill-down with the per-child walks.
-                        self.cache[childPath] = (result.entries,
-                                                 result.totalSize > 0 ? result.totalSize
-                                                    : result.entries.reduce(0) { $0 + $1.size })
+                        self.cache.setObject(CachedWalk(entries: result.entries,
+                                                 total: result.totalSize > 0 ? result.totalSize
+                                                    : result.entries.reduce(0) { $0 + $1.size }),
+                                             forKey: childPath as NSString)
                     }
                 }
                 let sum = r.totalSize > 0 ? r.totalSize : r.entries.reduce(0) { $0 + $1.size }
                 Task { @MainActor in
-                    self.cache[path] = (r.entries, sum)   // cache stays warm either way
+                    self.cache.setObject(CachedWalk(entries: r.entries, total: sum), forKey: path as NSString)   // cache stays warm either way
                     guard gen == self.scanGen else { return }
                     self.entries = r.entries
                     self.total = sum
