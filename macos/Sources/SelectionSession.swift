@@ -127,7 +127,11 @@ enum SelectionSession {
         s.wantedSigs = Set(wanted.compactMap { s.items.indices.contains($0) ? sig(s.items[$0]) : nil })
         s.wantedNames = Set(wanted.compactMap { s.items.indices.contains($0) ? s.items[$0].name : nil })
         s.expectedCount = s.items.count
-        let keys = MoTUI.keystrokesToSelect(wanted, count: s.items.count, confirm: false)
+        // Mole may render rows PRE-SELECTED (purge defaults most artifacts to ●).
+        // Plan against the list's current checked state so we toggle the delta,
+        // not just Space the wanted rows on top of the defaults.
+        let current = Set(s.items.enumerated().filter { $0.element.selected }.map { $0.offset })
+        let keys = MoTUI.keystrokesToSelect(wanted, count: s.items.count, currentlySelected: current, confirm: false)
         if s.items.count > s.viewportCount {
             // Selection spans more rows than Mole renders at once (the user pulled
             // in everything via "Show all"). One frame can't show them all, so we

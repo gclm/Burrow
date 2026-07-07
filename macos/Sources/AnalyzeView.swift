@@ -329,6 +329,16 @@ struct PulsingDot: View {
     }
 }
 
+/// A one-shot cooperative cancellation flag, set on the main actor when a scan
+/// is superseded and read from the background walk. Lock-guarded because the
+/// write and reads cross threads. #232
+final class ScanCancel: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+}
+
 @MainActor
 final class AnalyzeModel: ObservableObject {
     struct Progress: Equatable {
@@ -440,11 +450,19 @@ final class AnalyzeModel: ObservableObject {
     /// breadcrumbs have since moved to. (Same pattern as HistoryView's
     /// `loadGen`.)
     private var scanGen = 0
+    /// Cancels the in-flight background walk when a new navigation supersedes it.
+    /// The `scanGen` token above only gates whether a finishing walk's result is
+    /// APPLIED; this token makes a superseded walk stop SPAWNING `mo analyze`
+    /// processes right away, so rapid navigation / refresh can't stack overlapping
+    /// scans that each fire a fanout of engine processes. #232
+    private var scanToken: ScanCancel?
 
     private func scan(_ path: String, name: String, push: Bool, force: Bool = false) {
         if push { crumbs.append((name, path)) }
         scanGen += 1
         let gen = scanGen
+        // Any navigation supersedes the previous walk — stop it spawning at once.
+        scanToken?.cancel()
         // Cache hit → show instantly; don't re-run `mo analyze` for a
         // folder we already walked (back/drill is the common navigation).
         if !force, let cached = cache[path] {
@@ -454,10 +472,12 @@ final class AnalyzeModel: ObservableObject {
         loading = true
         progress = nil
         error = nil
+        let token = ScanCancel()
+        scanToken = token
         OperationCenter.shared.begin(opId, label: String(format: NSLocalizedString("Analyzing %@", comment: ""), name))
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let r = try Self.scanWithProgress(path) { current, done, total in
+                let r = try Self.scanWithProgress(path, isCancelled: { token.isCancelled }) { current, done, total in
                     Task { @MainActor in
                         guard gen == self.scanGen else { return }
                         self.progress = Progress(path: current, done: done, total: total)
@@ -501,6 +521,7 @@ final class AnalyzeModel: ObservableObject {
     /// aggregate call rather than spawning hundreds of processes.
     nonisolated static func scanWithProgress(
         _ path: String,
+        isCancelled: @escaping () -> Bool = { false },
         onProgress: @escaping (String, Int, Int) -> Void,
         cacheChild: @escaping (String, DiskScanResult) -> Void
     ) throws -> DiskScanResult {
@@ -525,15 +546,20 @@ final class AnalyzeModel: ObservableObject {
         var totalSize: Int64 = 0
         var done = 0
 
-        let inFlight = DispatchSemaphore(value: 6)   // bound concurrent `mo analyze`
+        // 3, not 6: each child spawns a full-subtree `mo analyze` walk, so a wider
+        // fanout pegs several cores at once (six were visible in #232). Three keeps
+        // wall-clock near the aggregate scan without saturating the machine.
+        let inFlight = DispatchSemaphore(value: 3)   // bound concurrent `mo analyze`
         let group = DispatchGroup()
         let workQ = DispatchQueue.global(qos: .userInitiated)
 
         for name in childNames {
+            if isCancelled() { break }               // superseded → stop queuing more walks
             inFlight.wait()
             group.enter()
             workQ.async {
                 defer { inFlight.signal(); group.leave() }
+                if isCancelled() { return }          // don't spawn `mo analyze` for a dead scan
                 let childPath = (path as NSString).appendingPathComponent(name)
                 var entry: DiskScanEntry?
                 var isDir: ObjCBool = false
@@ -562,6 +588,9 @@ final class AnalyzeModel: ObservableObject {
             }
         }
         group.wait()
+        // A superseded walk returns a PARTIAL tree; throwing keeps the caller's
+        // catch (which is scanGen-guarded) from caching it as if it were complete.
+        if isCancelled() { throw CancellationError() }
 
         entries.sort { $0.size > $1.size }
         return DiskScanResult(path: path, totalSize: totalSize,
