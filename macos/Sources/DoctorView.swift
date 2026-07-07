@@ -18,6 +18,15 @@ struct DoctorView: View {
     let db: DB
     @State private var checks: [Doctor.Check] = []
 
+    /// The rarely-changing, subprocess-backed posture probes, cached across
+    /// reopens with a short TTL. #239
+    private typealias Probes = (backup: Int?, smart: Bool?,
+                                sip: SecurityPosture.State, gatekeeper: SecurityPosture.State,
+                                fileVault: SecurityPosture.State, firewall: SecurityPosture.State,
+                                volumes: Int, iface: String?)
+    @MainActor private static var cachedProbes: (at: Date, value: Probes)?
+    private static let probeTTL: TimeInterval = 120
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -125,16 +134,26 @@ struct DoctorView: View {
         let cpuLoad = latest?.cpu.usage
         let battHealth: Int? = (latest?.batteries?.first?.capacity).flatMap { $0 > 0 ? $0 : nil }
         let displays = NSScreen.screens.count   // main-actor; reload is @MainActor
-        let probes = await Task.detached(priority: .utility) {
-            (backup: BackupStatus.lastBackupDaysAgo(),
-             smart: DiskHealth.smartVerified(),
-             sip: SecurityPosture.sip(DoctorView.run("/usr/bin/csrutil", ["status"])),
-             gatekeeper: SecurityPosture.gatekeeper(DoctorView.run("/usr/sbin/spctl", ["--status"])),
-             fileVault: SecurityPosture.fileVault(DoctorView.run("/usr/bin/fdesetup", ["status"])),
-             firewall: SecurityPosture.firewall(DoctorView.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"])),
-             volumes: DoctorView.externalVolumeCount(),
-             iface: Connectivity.defaultRoute(fromRouteGet: DoctorView.run("/sbin/route", ["-n", "get", "default"])).interface)
-        }.value
+        // Security posture (SIP/Gatekeeper/FileVault/firewall), SMART and the
+        // last-backup age change ~never, but each Doctor reopen used to re-spawn
+        // system_profiler + tmutil + four security tools. Cache the whole probe
+        // set with a short TTL so rapid reopens are instant. #239
+        let probes: Probes
+        if let c = Self.cachedProbes, Date().timeIntervalSince(c.at) < Self.probeTTL {
+            probes = c.value
+        } else {
+            probes = await Task.detached(priority: .utility) {
+                (backup: BackupStatus.lastBackupDaysAgo(),
+                 smart: DiskHealth.smartVerified(),
+                 sip: SecurityPosture.sip(DoctorView.run("/usr/bin/csrutil", ["status"])),
+                 gatekeeper: SecurityPosture.gatekeeper(DoctorView.run("/usr/sbin/spctl", ["--status"])),
+                 fileVault: SecurityPosture.fileVault(DoctorView.run("/usr/bin/fdesetup", ["status"])),
+                 firewall: SecurityPosture.firewall(DoctorView.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"])),
+                 volumes: DoctorView.externalVolumeCount(),
+                 iface: Connectivity.defaultRoute(fromRouteGet: DoctorView.run("/sbin/route", ["-n", "get", "default"])).interface)
+            }.value
+            Self.cachedProbes = (Date(), probes)
+        }
         checks = Doctor.report(.init(
             fullDiskAccess: fullDiskAccess,
             moInstalled: moInstalled, pressure: pressure,
@@ -164,17 +183,7 @@ struct DoctorView: View {
     /// Capture a short system command's stdout (off-main; used for the security
     /// posture probes). Self-contained so it doesn't depend on the engine seam.
     private static func run(_ path: String, _ args: [String]) -> String {
-        guard FileManager.default.isExecutableFile(atPath: path) else { return "" }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = pipe
-        do { try p.run() } catch { return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
+        ShellProbe.run(path, args, timeout: 10) ?? ""   // timeout-guarded (#239)
     }
 
     private func copyDiagnostics() {

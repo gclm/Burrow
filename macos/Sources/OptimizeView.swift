@@ -183,16 +183,6 @@ struct OptimizeView: View {
     }
 
     private static func runCmd(_ path: String, _ args: [String]) -> String {
-        guard FileManager.default.isExecutableFile(atPath: path) else { return "" }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = pipe
-        do { try p.run() } catch { return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
+        ShellProbe.run(path, args, timeout: 10) ?? ""   // timeout-guarded (#239)
     }
 }
