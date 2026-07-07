@@ -338,6 +338,7 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     /// to the left edge when an auto-hiding/collapsing menu bar hides the
     /// status item's own window (issue #223).
     private func showPopover(from button: NSStatusBarButton) {
+        producer.setPopoverOpen(true)   // keep live metrics flowing while shown (#235)
         guard let buttonWindow = button.window else {
             // No window to convert from — fall back to the direct anchor.
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -368,6 +369,7 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     /// Drop the anchor window once the popover is gone (transient dismiss or a
     /// second icon click), so it doesn't leak or linger over the menu bar.
     func popoverDidClose(_ notification: Notification) {
+        producer.setPopoverOpen(false)   // stop live work if nothing else is watching (#235)
         anchorWindow?.orderOut(nil)
         anchorWindow = nil
     }
