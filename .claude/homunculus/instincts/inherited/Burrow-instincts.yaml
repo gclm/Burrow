@@ -1,0 +1,388 @@
+# Instincts generated from https://github.com/gclm/Burrow
+# Generated: 2026-07-02T12:47:13.051Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: Burrow-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Commit Length
+
+## Action
+
+Write moderate-length commit messages (~63 characters)
+
+## Evidence
+
+- Average commit message length: 63 chars
+- Based on 10 commits
+
+---
+id: Burrow-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Naming Files
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: PascalCase
+
+---
+id: Burrow-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: Burrow-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: Burrow-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Test Naming
+
+## Action
+
+Name test files using the pattern: *Tests.cs
+
+## Evidence
+
+- File pattern: *Tests.cs
+- Consistent across test files
+
+---
+id: Burrow-workflow-bugfix-with-pull-request
+trigger: "when doing bugfix with pull request"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Workflow Bugfix With Pull Request
+
+## Action
+
+Follow the bugfix-with-pull-request workflow:
+1. Identify and fix a bug in a source file (e.g., .swift).
+2. Commit the fix with a descriptive message.
+3. Open a pull request referencing the fix.
+4. Merge the pull request, resulting in a merge commit with the same file(s) and referencing the fix.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: macos/Sources/StatusBarController.swift, macos/Sources/CrashReporter.swift, macos/Sources/HUDController.swift
+
+---
+id: Burrow-workflow-dead-code-prune-with-pull-request
+trigger: "when doing dead code prune with pull request"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/gclm/Burrow
+---
+
+# Burrow Workflow Dead Code Prune With Pull Request
+
+## Action
+
+Follow the dead-code-prune-with-pull-request workflow:
+1. Identify dead code using a static analysis tool (e.g., periphery).
+2. Remove unused declarations from multiple source files.
+3. Update or rename files as necessary.
+4. Commit all changes with a detailed message.
+5. Open a pull request for the code prune.
+6. Merge the pull request, resulting in a merge commit with the same files.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: macos/Sources/Brand.swift, macos/Sources/BurrowMark.swift, macos/Sources/EventHub.swift
+
+---
+id: burrow-instinct-file-naming
+trigger: "When creating a new source file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct File Naming
+
+## Action
+
+Name the file using PascalCase (e.g., StatusBarController.swift)
+
+## Evidence
+
+- Pattern in files: macos/Sources/StatusBarController.swift, macos/Sources/CrashReporter.swift
+
+---
+id: burrow-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Naming convention: functions: camelCase
+
+---
+id: burrow-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Naming convention: classes: PascalCase
+
+---
+id: burrow-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Naming convention: constants: SCREAMING_SNAKE_CASE
+
+---
+id: burrow-instinct-import-style
+trigger: "When importing modules in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- importStyle: relative
+
+---
+id: burrow-instinct-export-style
+trigger: "When exporting modules or symbols"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- exportStyle: named
+
+---
+id: burrow-instinct-test-file-naming
+trigger: "When creating a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Test File Naming
+
+## Action
+
+Name the test file with the pattern *Tests.cs
+
+## Evidence
+
+- test file pattern: *Tests.cs
+
+---
+id: burrow-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- testTypes: unit
+
+---
+id: burrow-instinct-commit-prefix
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Commit Prefix
+
+## Action
+
+Prefix the message with fix, chore, or prune as appropriate
+
+## Evidence
+
+- Seen in commits: fix(menubar): pin HUD popover..., chore(cask): drop depends_on..., prune: remove dead code...
+
+---
+id: burrow-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Commit Length
+
+## Action
+
+Keep the commit message concise (average ~63 characters)
+
+## Evidence
+
+- averageLength: 63
+
+---
+id: burrow-instinct-bugfix-pr-workflow
+trigger: "When someone wants to fix a bug and follow the PR workflow"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Bugfix Pr Workflow
+
+## Action
+
+Identify and fix the bug, commit with a descriptive message, open a pull request referencing the fix, and merge the pull request with a merge commit
+
+## Evidence
+
+- Workflow: bugfix-with-pull-request
+- Seen in commits: fix(menubar): pin HUD popover..., Merge pull request #225 from caezium/fix/223-popover-displacement
+
+---
+id: burrow-instinct-dead-code-prune-workflow
+trigger: "When someone wants to clean up dead code across the codebase"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: gclm/Burrow
+---
+
+# Burrow Instinct Dead Code Prune Workflow
+
+## Action
+
+Identify dead code using a static analysis tool, remove unused declarations from multiple files, commit with a detailed message, open a pull request, and merge the pull request
+
+## Evidence
+
+- Workflow: dead-code-prune-with-pull-request
+- Seen in commits: prune: remove dead code flagged by periphery, Merge pull request #226 from caezium/prune/main-dead-sweep
+
