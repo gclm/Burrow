@@ -155,11 +155,15 @@ struct TuneUpView: View {
         }
     }
 
+    /// Cached — building a RelativeDateTimeFormatter per render (this is a
+    /// computed property) is needlessly expensive. #240
+    private static let agoFmt: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .full; return f
+    }()
+
     private var scannedAgoText: String {
         guard let at = model.snapshot?.scannedAt else { return NSLocalizedString("Not scanned yet", comment: "") }
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return String(format: NSLocalizedString("Scanned %@", comment: ""), f.localizedString(for: at, relativeTo: Date()))
+        return String(format: NSLocalizedString("Scanned %@", comment: ""), Self.agoFmt.localizedString(for: at, relativeTo: Date()))
     }
 
     private var tidyNote: some View {
@@ -281,8 +285,7 @@ struct TuneUpView: View {
     }
 
     private func lastRunCard(_ at: Date, _ summary: String?) -> some View {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
+        let f = Self.agoFmt   // cached (#240)
         return GlassCard {
             HStack(spacing: 12) {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 16)).foregroundStyle(accent)

@@ -45,7 +45,8 @@ final class EventHub {
     }
 
     private func deregisterID(_ id: ObjectIdentifier) {
-        lock.lock(); conns[id] = nil; lock.unlock()
+        lock.lock(); conns[id] = nil; let empty = conns.isEmpty; lock.unlock()
+        if empty { stopKeepAlive() }   // no clients → stop the 15s broadcast (#240)
     }
 
     private func startKeepAlive() {
@@ -56,6 +57,15 @@ final class EventHub {
             }
             RunLoop.main.add(t, forMode: .common)
             self.keepAlive = t
+        }
+    }
+
+    /// Invalidate the keep-alive once the last stream drops — it used to fire
+    /// every 15s for the app's life after the first connection ever. #240
+    private func stopKeepAlive() {
+        DispatchQueue.main.async { [weak self] in
+            self?.keepAlive?.invalidate()
+            self?.keepAlive = nil
         }
     }
 }

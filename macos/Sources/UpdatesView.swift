@@ -235,14 +235,15 @@ struct UpdatesView: View {
         }
     }
 
+    private static let recencyFmt: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .full; return f
+    }()
     static func recencyPhrase(_ date: Date?) -> String {
         guard let date else { return NSLocalizedString("never opened", comment: "") }
         let interval = Date().timeIntervalSince(date)
         if interval < 3600 { return NSLocalizedString("active now", comment: "") }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
         return String(format: NSLocalizedString("opened %@", comment: "recency"),
-                      formatter.localizedString(for: date, relativeTo: Date()))
+                      Self.recencyFmt.localizedString(for: date, relativeTo: Date()))   // cached (#240)
     }
 
     static func isStale(_ date: Date?) -> Bool {
