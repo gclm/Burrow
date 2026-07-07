@@ -24,7 +24,7 @@ struct DoctorView: View {
                                 sip: SecurityPosture.State, gatekeeper: SecurityPosture.State,
                                 fileVault: SecurityPosture.State, firewall: SecurityPosture.State,
                                 volumes: Int, iface: String?)
-    @MainActor private static var cachedProbes: (at: Date, value: Probes)?
+    private static var cachedProbes: (at: Date, value: Probes)?
     private static let probeTTL: TimeInterval = 120
 
     var body: some View {

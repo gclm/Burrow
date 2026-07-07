@@ -377,7 +377,6 @@ final class SnapshotProducer {
     /// One 1 Hz pulse: read counters, differentiate, publish into the ring.
     /// Cheap (sub-ms registry reads) — runs on the clock's context.
     private func tickLive() {
-        guard liveWanted else { return }   // nothing is watching the live sparklines
         let now = deps.clock.now
         var rx: Double?, tx: Double?, rd: Double?, wr: Double?
         if let n = deps.hardware.netBytes(), let r = liveNet.mbps(n.rx, n.tx, at: now) {
