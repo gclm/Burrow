@@ -27,6 +27,14 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     /// anchored to that button rides along with it (issue #223). Anchoring to a
     /// window we place and own keeps the popover put. Alive only while shown.
     private var anchorWindow: NSWindow?
+    /// The screen-space frame the anchor was pinned to at show time, so it can be
+    /// re-asserted if the menu bar later collapses (see `screenParamsObserver`).
+    private var anchorFrame: NSRect = .zero
+    /// Fires while the popover is open: an auto-hiding menu bar collapsing
+    /// changes the screen's visibleFrame (a screen-parameters change) and
+    /// reshuffles status-bar-level windows, dragging the anchor — and the popover
+    /// — to the corner. We re-pin and re-position on that event (issue #223).
+    private var screenParamsObserver: NSObjectProtocol?
     private let db: DB
     private let producer: SnapshotProducer
     private weak var delegate: AppDelegate?
@@ -309,6 +317,7 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
 
     deinit {
         if let o = updateObserver { NotificationCenter.default.removeObserver(o) }
+        if let o = screenParamsObserver { NotificationCenter.default.removeObserver(o) }
         anchorWindow?.orderOut(nil)
         runnerTimer?.cancel()
         // Explicitly remove the item so toggling the menu-bar setting off
@@ -360,9 +369,27 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         anchor.contentView = NSView(frame: NSRect(origin: .zero, size: screenFrame.size))
         anchor.orderFrontRegardless()
         self.anchorWindow = anchor
+        self.anchorFrame = screenFrame
 
         if let content = anchor.contentView {
             popover.show(relativeTo: content.bounds, of: content, preferredEdge: .minY)
+        }
+
+        // The show-time pin isn't enough: when the menu bar auto-hides *after*
+        // the popover is up, the resulting screen-parameters change moves/hides
+        // the anchor and NSPopover re-homes to the screen corner. Re-assert the
+        // anchor's frame and re-show (which repositions a visible popover) each
+        // time that fires, so it stays put through reveal/collapse. (#223)
+        if screenParamsObserver == nil {
+            screenParamsObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification,
+                object: nil, queue: .main) { [weak self] _ in
+                guard let self, self.popover.isShown,
+                      let anchor = self.anchorWindow, let content = anchor.contentView else { return }
+                anchor.setFrame(self.anchorFrame, display: false)
+                anchor.orderFrontRegardless()
+                self.popover.show(relativeTo: content.bounds, of: content, preferredEdge: .minY)
+            }
         }
     }
 
@@ -370,6 +397,7 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     /// second icon click), so it doesn't leak or linger over the menu bar.
     func popoverDidClose(_ notification: Notification) {
         producer.setPopoverOpen(false)   // stop live work if nothing else is watching (#235)
+        if let o = screenParamsObserver { NotificationCenter.default.removeObserver(o); screenParamsObserver = nil }
         anchorWindow?.orderOut(nil)
         anchorWindow = nil
     }
