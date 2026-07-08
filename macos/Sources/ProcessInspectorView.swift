@@ -295,10 +295,11 @@ struct ProcessInspectorView: View {
         }
     }
 
+    private static let startedFmt: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f
+    }()
     /// Approximate wall-clock start time from the runtime (now − runtime).
     private static func startedText(runtimeSeconds: Double) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated
-        return f.localizedString(fromTimeInterval: -runtimeSeconds)
+        startedFmt.localizedString(fromTimeInterval: -runtimeSeconds)   // cached formatter (#240)
     }
 }

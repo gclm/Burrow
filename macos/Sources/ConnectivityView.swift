@@ -325,10 +325,11 @@ struct ConnectivityView: View {
         default:              return Brand.red
         }
     }
+    private static let relFmt: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f
+    }()
     private static func relative(_ d: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated
-        return f.localizedString(for: d, relativeTo: Date())
+        relFmt.localizedString(for: d, relativeTo: Date())   // cached formatter (#240)
     }
 
     private func scanNearby() {

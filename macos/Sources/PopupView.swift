@@ -720,8 +720,12 @@ final class HUDModel: ObservableObject {
     /// Camera/mic in-use poll (opt-in). Passive CoreMediaIO/CoreAudio reads
     /// every ~1.5 s while the popover is open; no-op when the toggle is off.
     func subscribePrivacy() async {
-        guard Store.cameraMicIndicatorEnabled else { return }
+        // Clear any stale dot when the poll stops (popover closed) or the
+        // feature is toggled off mid-session — the enable gate used to live only
+        // at the loop entry, so a lit dot could linger after either. #234
+        defer { cameraActive = false; micActive = false }
         while !Task.isCancelled {
+            guard Store.cameraMicIndicatorEnabled else { break }
             let state = await Task.detached(priority: .utility) {
                 (cam: CameraMicSensor.cameraInUse(), mic: CameraMicSensor.micInUse())
             }.value

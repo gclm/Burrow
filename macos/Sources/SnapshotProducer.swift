@@ -112,7 +112,12 @@ final class LiveFeed: ObservableObject {
     private func windowed(_ lastSeconds: TimeInterval, _ pick: (Sample) -> Double) -> [Double] {
         guard let newest = samples.last?.time else { return [] }
         let cutoff = newest.addingTimeInterval(-lastSeconds)
-        return samples.filter { $0.time >= cutoff }.map(pick)
+        // `samples` is ascending by time and the in-window slice is a contiguous
+        // suffix, so walk back from the end to the first in-window index — O(window)
+        // (~120) instead of filtering the whole ~3600-element ring every render. #237
+        var start = samples.count
+        while start > 0, samples[start - 1].time >= cutoff { start -= 1 }
+        return samples[start...].map(pick)
     }
 
     fileprivate func applySnapshot(_ s: MoleStatus, at: Date) {
@@ -206,6 +211,42 @@ final class SnapshotProducer {
     private var liveDisk = RateTracker()
     private var snapDisk = RateTracker()
 
+    /// The popover is a live consumer even when the main window is closed; the
+    /// status-bar controller reports its visibility. (guarded by lock)
+    private var popoverOpen = false
+
+    // Sensor reads (SMC temps/fans, IOAccelerator GPU) change slowly; a 1 Hz
+    // `--watch` stream would otherwise hammer IOKit every line. Cache them and
+    // refresh at most every `sensorTTL`. Byte counters (disk/net) are NOT cached
+    // — they feed rate trackers that need real per-tick deltas. #235
+    private let sensorLock = NSLock()
+    private var sensorCacheAt = Date.distantPast
+    private var cachedFans: (count: Int, rpm: [Int]) = (0, [])
+    private var cachedTemps: (cpu: Double?, gpu: Double?) = (nil, nil)
+    private var cachedGPU: Double?
+    private let sensorTTL: TimeInterval = 2.5
+
+    /// True when something is actually watching live metrics: the main window's
+    /// metrics pane (`foreground`), the popover, or a live menu-bar mode. When
+    /// false, the stream's non-persisted lines and the 1 Hz counter tick skip
+    /// their work — no point reading sensors nobody sees. #235
+    private var liveWanted: Bool {
+        lock.lock(); let fg = foreground, pop = popoverOpen; lock.unlock()
+        return fg || pop || Store.menuBarDisplayMode != .icon
+    }
+
+    /// Cached slow-sensor read, refreshed at most every `sensorTTL`.
+    private func sensors(at now: Date) -> (fans: (count: Int, rpm: [Int]), temps: (cpu: Double?, gpu: Double?), gpu: Double?) {
+        sensorLock.lock(); defer { sensorLock.unlock() }
+        if now.timeIntervalSince(sensorCacheAt) >= sensorTTL {
+            cachedFans = deps.hardware.fans()
+            cachedTemps = deps.hardware.temps()
+            cachedGPU = deps.hardware.gpuUtilization()
+            sensorCacheAt = now
+        }
+        return (cachedFans, cachedTemps, cachedGPU)
+    }
+
     init(deps: Deps) {
         self.deps = deps
     }
@@ -291,6 +332,18 @@ final class SnapshotProducer {
         armSnapshotTimer()   // no-op while streaming (guarded)
     }
 
+    /// Report popover visibility. While the popover is up the engine keeps live
+    /// data flowing even with the main window closed; opening takes an immediate
+    /// sample so the popover isn't blank for a whole interval. #235
+    func setPopoverOpen(_ open: Bool) {
+        lock.lock()
+        guard popoverOpen != open else { lock.unlock(); return }
+        popoverOpen = open
+        let isRunning = running
+        lock.unlock()
+        if isRunning && open { deps.work { self.sampleNow() } }
+    }
+
     // MARK: Cadence
 
     private func armSnapshotTimer() {
@@ -354,13 +407,18 @@ final class SnapshotProducer {
     /// never pollutes the DB) → optionally persist → publish. Shared by the poll
     /// (`persist: true` every tick) and the `--watch` stream (persist throttled).
     private func ingest(raw: String, persist: Bool) {
+        // Nothing watching and not due for persistence → skip the whole line:
+        // no sensor reads, no decode, no publish. That's the `--watch` saving.
+        // Persisted lines always run so the long-range history stays complete. #235
+        if !persist && !liveWanted { return }
         let now = deps.clock.now
-        let fans = deps.hardware.fans()
-        let temps = deps.hardware.temps()
+        let sensed = sensors(at: now)               // cached SMC/GPU read
+        let fans = sensed.fans
+        let temps = sensed.temps
         let disk = deps.hardware.diskBytes().flatMap { snapDisk.mbps($0.read, $0.write, at: now) }
         let fill = SnapshotPatcher.NativeFill(
             disk: disk.map { (read: $0.a, write: $0.b) },
-            gpu: deps.hardware.gpuUtilization(),
+            gpu: sensed.gpu,
             fans: fans.count > 0 ? fans : nil,
             cpuTemp: temps.cpu,
             gpuTemp: temps.gpu)

@@ -14,16 +14,9 @@ enum DiskHealth {
     /// true = SMART "Verified", false = any other status, nil = unreadable
     /// (no internal NVMe, or system_profiler failed).
     static func smartVerified() -> Bool? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
-        p.arguments = ["SPNVMeDataType"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        do { try p.run() } catch { return nil }
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else { return nil }
-        let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        // system_profiler routinely takes seconds; bound it so a wedge can't
+        // hang the Doctor probe task. #239
+        guard let text = ShellProbe.run("/usr/sbin/system_profiler", ["SPNVMeDataType"], timeout: 12) else { return nil }
         guard let line = text.split(separator: "\n").first(where: { $0.contains("SMART Status:") }) else {
             return nil
         }

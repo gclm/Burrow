@@ -57,14 +57,30 @@ enum NetUsage {
         return out
     }
 
-    /// Sample per-process bandwidth (bytes/sec). Runs nettop for ~1s — call off
-    /// the main thread. Returns empty on any failure (bandwidth degrades to "—").
+    private static let cacheLock = NSLock()
+    private static var cached: (at: Date, rates: [Int: Rates])?
+    /// Reuse a recent frame instead of re-running the ~1 s blocking nettop for
+    /// every caller. PortsView re-samples on appear / tab-change / refresh /
+    /// after each kill, and ProcessInspector samples the whole system just to
+    /// read one pid — within this window they now share one frame. #238
+    private static let cacheTTL: TimeInterval = 2.5
+
+    /// Per-process bandwidth (bytes/sec), served from a ≤`cacheTTL`s cache; on a
+    /// miss it runs nettop for ~1 s (blocking — call off the main thread).
+    /// Returns empty on any failure (bandwidth degrades to "—").
     static func sample() -> [Int: Rates] {
+        cacheLock.lock()
+        if let c = cached, Date().timeIntervalSince(c.at) < cacheTTL {
+            let r = c.rates; cacheLock.unlock(); return r
+        }
+        cacheLock.unlock()
         let out = (try? MoEngine.shared.capture(
             MoCommand(target: .executable("/usr/bin/nettop"),
                       args: ["-P", "-x", "-d", "-s", "1", "-L", "2", "-J", "bytes_in,bytes_out"],
                       timeout: 8)))?.stdout ?? ""
-        return parse(out)
+        let rates = parse(out)
+        cacheLock.lock(); cached = (Date(), rates); cacheLock.unlock()
+        return rates
     }
 
     /// Reverse-DNS a numeric IP to a hostname, or nil if there's no PTR (or it
