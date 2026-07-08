@@ -289,14 +289,21 @@ final class StatusBarController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     }
 
     /// The driving metric's value as a small image (standalone + "show value").
+    /// Reserves a stable field for the metric and right-aligns the number into
+    /// it, with the shared cap-centering — so the runner's readout tracks the
+    /// user's text-size setting and doesn't jiggle as the value changes, exactly
+    /// like the metric row (issue #245).
     private func runnerValueImage() -> NSImage? {
-        let text = MenuBarRenderer.valueText(Store.runnerConfig.metric, currentValues())
-        let font = MenuBarRenderer.valueFontPublic
+        let metric = Store.runnerConfig.metric
+        let text = MenuBarRenderer.valueText(metric, currentValues())
+        let font = MenuBarRenderer.valueFont(.medium)
+        let fieldW = MenuBarRenderer.valueFieldWidth(metric, font: font)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
         let w = (text as NSString).size(withAttributes: attrs).width
         let h = MenuBarRenderer.height
-        return NSImage(size: NSSize(width: max(1, w), height: h), flipped: false) { _ in
-            (text as NSString).draw(at: NSPoint(x: 0, y: (h - font.ascender + font.descender) / 2), withAttributes: attrs)
+        return NSImage(size: NSSize(width: max(1, fieldW), height: h), flipped: false) { _ in
+            (text as NSString).draw(at: NSPoint(x: max(0, fieldW - w), y: MenuBarRenderer.centeredY(font, h)),
+                                    withAttributes: attrs)
             return true
         }
     }

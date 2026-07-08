@@ -471,7 +471,7 @@ struct SettingsView: View {
                         AppDelegate.shared?.applyMenuBarVisibility(Store.showMenuBarIcon)
                     }
                 }
-                footnote("Choose which metrics appear in the menu bar and how each is shown — refreshed with the sampler.")
+                footnote("Choose which metrics appear in the menu bar and how each is shown — refreshed with the sampler. Each metric has its own text size in its options (⚙︎).")
                 if displayMode == .metrics { menuBarMetricsEditor }
                 toggleRow("Show camera & mic in-use indicator", isOn: $cameraMicIndicator) {
                     Store.cameraMicIndicatorEnabled = $0
@@ -1083,6 +1083,11 @@ struct SettingsView: View {
             optionPicker("Color", value: item.color.title) {
                 ForEach(item.metric.colorModes) { c in
                     Button(c.title) { updateMenuBarItem(idx) { $0.color = c } }
+                }
+            }
+            optionPicker("Text size", value: item.textSize.title) {
+                ForEach(MenuBarTextSize.allCases) { s in
+                    Button(s.title) { updateMenuBarItem(idx) { $0.textSize = s } }
                 }
             }
             if style == .bar || style == .sparkline || style == .speed || style == .battery {
