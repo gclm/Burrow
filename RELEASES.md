@@ -1,3 +1,49 @@
+# Burrow 0.9.2
+
+A stability and battery release — several fixes to Cleanup, Analyze, and the
+menu bar, plus a round of performance work that makes Burrow noticeably lighter
+when it's sitting idle in the background.
+
+## Fixes
+- **Purge works again.** Cleanup → Project build artifacts was refusing every
+  removal ("Couldn't confirm the selection safely") because the engine renders
+  its list with items pre-selected — Burrow now toggles the difference so your
+  selection actually applies. ([#231](https://github.com/caezium/Burrow/issues/231))
+- **Analyze no longer floods the machine with engine processes.** Superseded
+  scans are cancelled and concurrency is capped, so opening or refreshing the
+  Analyze tab won't peg your CPU with a pile of `analyze-go` processes.
+  ([#232](https://github.com/caezium/Burrow/issues/232))
+- **Camera/mic in-use indicator is honest.** It no longer false-lights from
+  virtual audio/video devices (loopback, Camo, Teams, …) — e.g. playing audio
+  through a virtual device — and clears reliably when capture ends.
+  ([#234](https://github.com/caezium/Burrow/issues/234))
+- **Menu-bar popover** stays put instead of flying to a screen edge, and sizes
+  to its own display on multi-monitor setups.
+  ([#223](https://github.com/caezium/Burrow/issues/223))
+- Fewer spurious "App Hang" reports.
+
+## Performance & battery
+- **The metrics engine stops hammering the sensors when nothing is on screen.**
+  It used to read the SMC temperature/fan and GPU counters ~once a second for the
+  whole time the app was running; those reads are now cached, and idle stream
+  frames are skipped when no window is open — a real battery win.
+  ([#235](https://github.com/caezium/Burrow/issues/235), [#237](https://github.com/caezium/Burrow/issues/237))
+- Bounded Analyze memory (walk/icon caches now evict).
+  ([#236](https://github.com/caezium/Burrow/issues/236))
+- System probes (Doctor, disk SMART, Time Machine) are timeout-guarded so a
+  stuck system tool can't hang the pane; Doctor results are cached across reopens.
+  ([#239](https://github.com/caezium/Burrow/issues/239))
+- Network-usage views share one sample instead of each running a 1-second scan.
+  ([#238](https://github.com/caezium/Burrow/issues/238))
+- Smaller idle-timer and date-formatter cleanups.
+  ([#240](https://github.com/caezium/Burrow/issues/240))
+
+## Under the hood
+- Dead-code prune; the Homebrew cask no longer depends on a system `mole`
+  (the engine has been bundled since 0.9.0).
+
+---
+
 # Burrow 0.9.1
 
 A quick fix for **Intel Macs**. In 0.9.0 the newly-bundled engine binaries were
