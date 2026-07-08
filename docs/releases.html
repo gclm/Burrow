@@ -123,13 +123,51 @@
 <header class="hero page">
   <h1>Changelog</h1>
   <p>Every version at a glance — what it added, changed, and fixed. Full notes for each live on GitHub.</p>
-  <p class="count">15 releases · latest 0.9.0 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
+  <p class="count">16 releases · latest 0.9.2 · <a href="https://github.com/caezium/Burrow/releases" target="_blank" rel="noopener">GitHub releases ↗</a></p>
 </header>
 
 <main class="page">
+    <article class="entry" id="v0.9.2">
+      <div class="ver-col">
+        <h2 class="ver">0.9.2<span class="latest">latest</span></h2>
+        <span class="date mono">Jul 8, 2026</span>
+        <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.9.2" target="_blank" rel="noopener">full notes ↗</a>
+      </div>
+      <div class="sbody">
+        <p class="lead">A stability and battery release — fixes to Cleanup, Analyze, and the menu bar, plus performance work that makes Burrow noticeably lighter while it sits idle.</p>
+        <div class="sblock">
+          <div class="slabel mono">Fixes</div>
+          <ul class="slist">
+            <li>Purge (Cleanup → Project build artifacts) applies your selection instead of aborting with “Couldn't confirm the selection safely”</li>
+            <li>Analyze cancels superseded scans and caps engine concurrency — no more runaway pile of processes</li>
+            <li>Camera/mic in-use indicator ignores virtual audio/video devices and clears when capture ends</li>
+            <li>Menu-bar popover no longer flies to a screen edge or mis-sizes on multi-display setups</li>
+            <li>Fewer spurious “App Hang” reports</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">Performance &amp; battery</div>
+          <ul class="slist">
+            <li>Metrics engine caches slow SMC/GPU sensor reads and skips idle stream frames when no window is open</li>
+            <li>Analyze walk and icon caches are now bounded (evict under memory pressure)</li>
+            <li>Live sparklines window their data instead of scanning the full history each frame</li>
+            <li>Doctor security/SMART/backup probes are timeout-guarded and cached across reopens</li>
+            <li>Network-usage views share one sample instead of each running a 1-second scan</li>
+          </ul>
+        </div>
+        <div class="sblock">
+          <div class="slabel mono">Under the hood</div>
+          <ul class="slist">
+            <li>Dead-code prune</li>
+            <li>Homebrew cask no longer depends on a system <code>mo</code> (engine bundled since 0.9.0)</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
     <article class="entry" id="v0.9.0">
       <div class="ver-col">
-        <h2 class="ver">0.9.0<span class="latest">latest</span></h2>
+        <h2 class="ver">0.9.0</h2>
         <span class="date mono">Jun 30, 2026</span>
         <a class="gh mono" href="https://github.com/caezium/Burrow/releases/tag/v0.9.0" target="_blank" rel="noopener">full notes ↗</a>
       </div>
