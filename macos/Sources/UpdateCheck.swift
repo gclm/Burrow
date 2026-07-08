@@ -198,6 +198,13 @@ enum UpdateCheck {
         echo "Updating Burrow via Homebrew — it'll reopen when this finishes."
         echo
         for _ in $(seq 1 60); do pgrep -x Burrow >/dev/null 2>&1 || break; sleep 0.5; done
+        # Refresh the tap first: Homebrew's auto-update is throttled
+        # (HOMEBREW_AUTO_UPDATE_SECS, ~daily), so a plain `brew upgrade` can read a
+        # stale local tap and report "no new version" even when the app knows a
+        # release is out (the app checks GitHub directly). `brew update` bypasses
+        # the throttle so the cask is current. Its own exit status is ignored — a
+        # warning on some *other* tap must not abort our upgrade. (#243)
+        brew update || true
         brew upgrade --cask burrow
         code=$?
         echo
