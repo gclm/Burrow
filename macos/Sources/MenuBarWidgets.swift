@@ -229,17 +229,22 @@ struct MenuBarItem: Codable, Equatable, Identifiable {
     var pictogram: SpeedPictogram = .arrows
     /// Speed: append the unit suffix (M/K) to the rate.
     var showUnits: Bool = true
+    /// Per-widget text size (issue #245) — each metric sizes independently, so a
+    /// user can make just Network large while CPU/RAM stay compact.
+    var textSize: MenuBarTextSize = .medium
 
     init(metric: MenuBarMetric, style: MenuBarWidgetStyle, color: MenuBarColorMode = .utilization,
          showLabel: Bool = false, showValue: Bool = true, fill: Bool = true,
-         historyPoints: Int = 30, pictogram: SpeedPictogram = .arrows, showUnits: Bool = true) {
+         historyPoints: Int = 30, pictogram: SpeedPictogram = .arrows, showUnits: Bool = true,
+         textSize: MenuBarTextSize = .medium) {
         self.metric = metric; self.style = style; self.color = color
         self.showLabel = showLabel; self.showValue = showValue; self.fill = fill
         self.historyPoints = historyPoints; self.pictogram = pictogram; self.showUnits = showUnits
+        self.textSize = textSize
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, metric, style, color, showLabel, showValue, fill, historyPoints, pictogram, showUnits
+        case id, metric, style, color, showLabel, showValue, fill, historyPoints, pictogram, showUnits, textSize
     }
 
     /// Tolerant decode: every field falls back to its default, so widget rows
@@ -257,6 +262,7 @@ struct MenuBarItem: Codable, Equatable, Identifiable {
         historyPoints = (try? c.decode(Int.self, forKey: .historyPoints)) ?? 30
         pictogram     = (try? c.decode(SpeedPictogram.self, forKey: .pictogram)) ?? .arrows
         showUnits     = (try? c.decode(Bool.self, forKey: .showUnits)) ?? true
+        textSize      = (try? c.decode(MenuBarTextSize.self, forKey: .textSize)) ?? .medium
     }
 
     /// Coerce the style to one the metric actually supports (config can drift
@@ -333,11 +339,13 @@ enum MemoryPressure {
 enum MenuBarRenderer {
     static var height: CGFloat { max(18, NSStatusBar.system.thickness) }
 
-    private static let spacing: CGFloat = 8     // between widgets
+    private static let spacing: CGFloat = 6     // between widgets
     private static let pad: CGFloat = 3         // leading/trailing
-    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-    private static let labelFont = NSFont.monospacedSystemFont(ofSize: 8, weight: .bold)
-    private static let speedFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+    // Fonts take a per-widget text size (issue #245) so each metric sizes
+    // independently. `.medium` == the historical 11/8/8 pt.
+    static func valueFont(_ size: MenuBarTextSize) -> NSFont { .monospacedDigitSystemFont(ofSize: size.valueSize, weight: .medium) }
+    static func labelFont(_ size: MenuBarTextSize) -> NSFont { .monospacedSystemFont(ofSize: size.labelSize, weight: .bold) }
+    static func speedFont(_ size: MenuBarTextSize) -> NSFont { .monospacedDigitSystemFont(ofSize: size.speedSize, weight: .medium) }
     private static let barW: CGFloat = 22
     private static let barH: CGFloat = 4
     private static let sparkW: CGFloat = 26
@@ -452,6 +460,36 @@ enum MenuBarRenderer {
             return rate(v + (values.secondary[m] ?? 0))
         }
     }
+
+    /// Reserved width for a metric's numeric field, measured from its widest
+    /// plausible string rather than the current value (issue #245). The value
+    /// is right-aligned into this field at draw time, so the row keeps a stable
+    /// width as the number changes — the digits grow leftward into the reserve
+    /// instead of shoving every menu-bar icon to the right each tick.
+    static func valueFieldWidth(_ m: MenuBarMetric, font: NSFont) -> CGFloat {
+        let candidates: [String]
+        switch m {
+        case .cpu, .memory, .gpu, .diskUsage, .battery: candidates = ["100%"]
+        case .fan:              candidates = ["9999"]
+        case .temperature:      candidates = ["100°"]
+        case .power:            candidates = ["999W"]
+        // Rates never share a fixed digit count ("640K" / "1.2M" / "125M"),
+        // and only digits are monospaced — reserve the widest of the shapes.
+        case .network, .diskIO: candidates = ["999M", "1.2M", "640K"]
+        }
+        return candidates
+            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 0
+    }
+
+    /// Origin y that optically centers `font`'s cap band within `height` —
+    /// digits and "%" carry no descender, so centering the cap band (not the
+    /// full line box) keeps the value visually centered rather than low. Shared
+    /// by the widget cells and the runner's value image so every menu-bar
+    /// readout centers identically (issue #245).
+    static func centeredY(_ font: NSFont, _ height: CGFloat) -> CGFloat {
+        (height - font.capHeight) / 2 + font.descender
+    }
 }
 
 // MARK: - One drawn widget
@@ -477,24 +515,29 @@ private struct Cell {
     }
 
     private static func width(item: MenuBarItem, style: MenuBarWidgetStyle, values: MenuBarMetricValues) -> CGFloat {
-        let valueW = textW(MenuBarRenderer.valueText(item.metric, values), MenuBarRenderer.valueFontPublic)
+        // Reserve the numeric field from the metric's widest string, not the
+        // live value, so the cell width stays constant as the number changes
+        // (issue #245). The value is right-aligned into it at draw time.
+        let valueFieldW = MenuBarRenderer.valueFieldWidth(item.metric, font: MenuBarRenderer.valueFont(item.textSize))
         // Optional leading label (on the non-text styles) + optional trailing value.
         let labelPrefix = (item.showLabel && style != .value && style != .labeled)
-            ? textW(item.metric.label, MenuBarRenderer.labelFontPublic) + 4 : 0
-        let valueSuffix = item.showValue ? (5 + valueW) : 0
+            ? textW(item.metric.label, MenuBarRenderer.labelFont(item.textSize)) + 4 : 0
+        let valueSuffix = item.showValue ? (5 + valueFieldW) : 0
         switch style {
         case .value:
-            return valueW
+            return valueFieldW
         case .labeled:
-            return textW(item.metric.label, MenuBarRenderer.labelFontPublic) + 4 + valueW
+            return textW(item.metric.label, MenuBarRenderer.labelFont(item.textSize)) + 4 + valueFieldW
         case .bar:
             return labelPrefix + MenuBarRenderer.barWPublic + valueSuffix
         case .sparkline:
             return labelPrefix + MenuBarRenderer.sparkWPublic + valueSuffix
         case .speed:
-            let rx = item.pictogram.symbol(up: false) + MenuBarRenderer.rate(values.primary[item.metric] ?? 0, units: item.showUnits)
-            let tx = item.pictogram.symbol(up: true) + MenuBarRenderer.rate(values.secondary[item.metric] ?? 0, units: item.showUnits)
-            return labelPrefix + max(textW(rx, MenuBarRenderer.speedFontPublic), textW(tx, MenuBarRenderer.speedFontPublic))
+            // Pictogram (fixed) + a reserved rate field, in the speed font.
+            let f = MenuBarRenderer.speedFont(item.textSize)
+            let pictW = max(textW(item.pictogram.symbol(up: false), f),
+                            textW(item.pictogram.symbol(up: true), f))
+            return labelPrefix + pictW + MenuBarRenderer.valueFieldWidth(item.metric, font: f)
         case .battery:
             return labelPrefix + MenuBarRenderer.batteryWPublic + valueSuffix
         }
@@ -507,7 +550,7 @@ private struct Cell {
         // Optional leading label for the non-text styles (value/labeled draw
         // their own label inline).
         if item.showLabel, style != .value, style != .labeled {
-            let lf = MenuBarRenderer.labelFontPublic
+            let lf = MenuBarRenderer.labelFont(item.textSize)
             drawString(item.metric.label, lf, .secondaryLabelColor, at: NSPoint(x: x, y: centeredY(lf, height)))
             x += (item.metric.label as NSString).size(withAttributes: [.font: lf]).width + 4
         }
@@ -529,25 +572,35 @@ private struct Cell {
         (s as NSString).draw(at: p, withAttributes: [.font: font, .foregroundColor: color])
     }
 
-    /// Baseline y that vertically centers `font` within the bar height.
+    /// Vertical centering — see `MenuBarRenderer.centeredY` (shared so the cells
+    /// and the runner's value image center identically).
     private func centeredY(_ font: NSFont, _ height: CGFloat) -> CGFloat {
-        (height - font.ascender + font.descender) / 2
+        MenuBarRenderer.centeredY(font, height)
+    }
+
+    /// Draw `s` right-aligned inside a reserved field of `fieldW` starting at
+    /// `x`, vertically centered. The number's right edge stays put so the cell
+    /// width is stable as the value changes (issue #245).
+    private func drawValueField(_ s: String, _ font: NSFont, _ color: NSColor,
+                                x: CGFloat, fieldW: CGFloat, height: CGFloat) {
+        let w = (s as NSString).size(withAttributes: [.font: font]).width
+        drawString(s, font, color, at: NSPoint(x: x + max(0, fieldW - w), y: centeredY(font, height)))
     }
 
     private func drawValue(_ x: CGFloat, _ h: CGFloat) {
-        let f = MenuBarRenderer.valueFontPublic
-        drawString(MenuBarRenderer.valueText(item.metric, values), f, valueColor,
-                   at: NSPoint(x: x, y: centeredY(f, h)))
+        let f = MenuBarRenderer.valueFont(item.textSize)
+        drawValueField(MenuBarRenderer.valueText(item.metric, values), f, valueColor,
+                       x: x, fieldW: MenuBarRenderer.valueFieldWidth(item.metric, font: f), height: h)
     }
 
     private func drawLabeled(_ x: CGFloat, _ h: CGFloat) {
-        let lf = MenuBarRenderer.labelFontPublic
+        let lf = MenuBarRenderer.labelFont(item.textSize)
         let label = item.metric.label
         drawString(label, lf, NSColor.secondaryLabelColor, at: NSPoint(x: x, y: centeredY(lf, h)))
         let lw = (label as NSString).size(withAttributes: [.font: lf]).width
-        let vf = MenuBarRenderer.valueFontPublic
-        drawString(MenuBarRenderer.valueText(item.metric, values), vf, valueColor,
-                   at: NSPoint(x: x + lw + 4, y: centeredY(vf, h)))
+        let vf = MenuBarRenderer.valueFont(item.textSize)
+        drawValueField(MenuBarRenderer.valueText(item.metric, values), vf, valueColor,
+                       x: x + lw + 4, fieldW: MenuBarRenderer.valueFieldWidth(item.metric, font: vf), height: h)
     }
 
     private func drawBar(_ x: CGFloat, _ h: CGFloat) {
@@ -563,9 +616,9 @@ private struct Cell {
             valueColor.setFill(); fill.fill()
         }
         if item.showValue {
-            let vf = MenuBarRenderer.valueFontPublic
-            drawString(MenuBarRenderer.valueText(item.metric, values), vf, valueColor,
-                       at: NSPoint(x: x + bw + 5, y: centeredY(vf, h)))
+            let vf = MenuBarRenderer.valueFont(item.textSize)
+            drawValueField(MenuBarRenderer.valueText(item.metric, values), vf, valueColor,
+                           x: x + bw + 5, fieldW: MenuBarRenderer.valueFieldWidth(item.metric, font: vf), height: h)
         }
     }
 
@@ -601,24 +654,34 @@ private struct Cell {
             color.withAlphaComponent(0.4).setStroke(); base.lineWidth = 1; base.stroke()
         }
         if item.showValue {
-            let vf = MenuBarRenderer.valueFontPublic
-            drawString(MenuBarRenderer.valueText(item.metric, values), vf, color,
-                       at: NSPoint(x: x + sw + 5, y: centeredY(vf, h)))
+            let vf = MenuBarRenderer.valueFont(item.textSize)
+            drawValueField(MenuBarRenderer.valueText(item.metric, values), vf, color,
+                           x: x + sw + 5, fieldW: MenuBarRenderer.valueFieldWidth(item.metric, font: vf), height: h)
         }
     }
 
     private func drawSpeed(_ x: CGFloat, _ h: CGFloat) {
-        let f = MenuBarRenderer.speedFontPublic
-        let down = item.pictogram.symbol(up: false) + MenuBarRenderer.rate(values.primary[item.metric] ?? 0, units: item.showUnits)
-        let up   = item.pictogram.symbol(up: true)  + MenuBarRenderer.rate(values.secondary[item.metric] ?? 0, units: item.showUnits)
+        let f = MenuBarRenderer.speedFont(item.textSize)
+        let downSym = item.pictogram.symbol(up: false)
+        let upSym   = item.pictogram.symbol(up: true)
+        let downNum = MenuBarRenderer.rate(values.primary[item.metric] ?? 0, units: item.showUnits)
+        let upNum   = MenuBarRenderer.rate(values.secondary[item.metric] ?? 0, units: item.showUnits)
+        let pictW  = max(Cell.textW(downSym, f), Cell.textW(upSym, f))
+        let fieldW = MenuBarRenderer.valueFieldWidth(item.metric, font: f)
         let lineH = f.ascender - f.descender
         let gap: CGFloat = 1
         let topY = h / 2 + gap / 2 - f.descender
         let botY = h / 2 - lineH - gap / 2 - f.descender
         let cDown = item.color == .mono ? NSColor.labelColor : (item.color.fixedColor ?? NSColor(Brand.blue))
         let cUp   = item.color == .mono ? NSColor.secondaryLabelColor : (item.color.fixedColor ?? NSColor(Brand.green))
-        drawString(down, f, cDown, at: NSPoint(x: x, y: topY))
-        drawString(up, f, cUp, at: NSPoint(x: x, y: botY))
+        // Pictogram anchored at the left; the rate right-aligned into the
+        // reserved field so both rows' digits align and the cell width stays
+        // stable as throughput swings (issue #245). Out (↑) sits on top, in (↓)
+        // below — flipped per the #245 follow-up.
+        drawString(upSym, f, cUp, at: NSPoint(x: x, y: topY))
+        drawString(downSym, f, cDown, at: NSPoint(x: x, y: botY))
+        drawString(upNum, f, cUp, at: NSPoint(x: x + pictW + max(0, fieldW - Cell.textW(upNum, f)), y: topY))
+        drawString(downNum, f, cDown, at: NSPoint(x: x + pictW + max(0, fieldW - Cell.textW(downNum, f)), y: botY))
     }
 
     private func drawBattery(_ x: CGFloat, _ h: CGFloat) {
@@ -641,9 +704,9 @@ private struct Cell {
             color.setFill(); fill.fill()
         }
         if item.showValue {
-            let vf = MenuBarRenderer.valueFontPublic
-            drawString(MenuBarRenderer.valueText(item.metric, values), vf, color,
-                       at: NSPoint(x: x + bw + 4, y: centeredY(vf, h)))
+            let vf = MenuBarRenderer.valueFont(item.textSize)
+            drawValueField(MenuBarRenderer.valueText(item.metric, values), vf, color,
+                           x: x + bw + 4, fieldW: MenuBarRenderer.valueFieldWidth(item.metric, font: vf), height: h)
         }
     }
 }
@@ -654,9 +717,6 @@ private struct Cell {
 // the private metrics it needs through thin public shims (keeps the tuning
 // values in one place).
 extension MenuBarRenderer {
-    static var valueFontPublic: NSFont { valueFont }
-    static var labelFontPublic: NSFont { labelFont }
-    static var speedFontPublic: NSFont { speedFont }
     static var barWPublic: CGFloat { barW }
     static var barHPublic: CGFloat { barH }
     static var sparkWPublic: CGFloat { sparkW }

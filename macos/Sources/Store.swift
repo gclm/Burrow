@@ -29,6 +29,52 @@ enum MenuBarDisplayMode: String {
     case icon, metrics, runner
 }
 
+/// Text size for the menu-bar metric row (issue #245 — the value read too
+/// small next to other menu-bar meters). `.medium` is the historical size, so
+/// existing users see no change until they pick a larger one. Drives the
+/// `MenuBarRenderer` fonts.
+enum MenuBarTextSize: String, Codable, CaseIterable, Identifiable {
+    case small, medium, large
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .small:  return NSLocalizedString("Small", comment: "")
+        case .medium: return NSLocalizedString("Medium", comment: "")
+        case .large:  return NSLocalizedString("Large", comment: "")
+        }
+    }
+
+    /// Primary value font (value/labeled/bar/sparkline/battery styles).
+    /// `.medium` == the historical 11 pt.
+    var valueSize: CGFloat {
+        switch self {
+        case .small:  return 10
+        case .medium: return 11
+        case .large:  return 14
+        }
+    }
+
+    /// Short uppercase tag ("CPU", "NET"). `.medium` == the historical 8 pt.
+    var labelSize: CGFloat {
+        switch self {
+        case .small:  return 7
+        case .medium: return 8
+        case .large:  return 10
+        }
+    }
+
+    /// The two-line `speed` (↓↑) style — capped smaller than the value font so
+    /// both rows still fit the menu-bar height at the large setting.
+    var speedSize: CGFloat {
+        switch self {
+        case .small:  return 7
+        case .medium: return 8
+        case .large:  return 9
+        }
+    }
+}
+
 /// A section of the menu-bar popover (`PopupView`) the user can show/hide
 /// (issue #82 — the popup is the surface they actually wanted to customize).
 enum PopupSection: String, Codable, CaseIterable, Identifiable {
