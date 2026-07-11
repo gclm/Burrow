@@ -110,13 +110,13 @@ enum BurrowConductor {
         UserDefaults.standard.bool(forKey: "BurrowStreamViaConductor")
     }
 
-    /// Opt-in switch for the live-filling treemap: stream `analyze --progress` so a scan reports
-    /// the engine's file-level counters. Default OFF — it reworks AnalyzeView's scan flow +
-    /// progress granularity and can't be validated in CI. Read-only (no data risk), but gated so
-    /// the UX change is opt-in. Flip with:
+    /// Default OFF: the per-child walk stays the default because its "scanning <child> · k/N"
+    /// progress tells the user WHAT is being measured. The single streamed `analyze --progress` is
+    /// faster but its only signal is a running file count (the engine's per-tick path is usually
+    /// empty), which reads as opaque. Opt into the fast-but-opaque path with:
     ///   `defaults write dev.caezium.Burrow BurrowStreamAnalyze -bool YES`
     static var streamingAnalyzeEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "BurrowStreamAnalyze")
+        (UserDefaults.standard.object(forKey: "BurrowStreamAnalyze") as? Bool) ?? false
     }
 
     /// The streamable engine commands the conductor forwards with `--stream`. purge/installer are

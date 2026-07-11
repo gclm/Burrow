@@ -50,6 +50,11 @@ final class HUDController: NSViewController {
         // it rarely needs to.
         scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = false
+        // No rubber-band bounce: when the content fits (the common case) the scroll view must not
+        // elastic-scroll into empty space and spring back (the reported popover-scroll bug).
+        // Content past the screen-height cap still scrolls — elasticity only governs the bounce.
+        scroll.verticalScrollElasticity = .none
+        scroll.horizontalScrollElasticity = .none
         scroll.automaticallyAdjustsContentInsets = false
 
         hosting.translatesAutoresizingMaskIntoConstraints = false

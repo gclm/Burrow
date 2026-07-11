@@ -76,13 +76,16 @@ enum DiskScanner {
     /// callers must run on a background queue. Returns aggregated sizes
     /// for each direct child; drill in by calling again with the child's
     /// path.
-    static func scan(_ path: String) throws -> DiskScanResult {
+    /// `timeout` bounds a single level's walk: the top-level scan keeps the generous default, but
+    /// the per-child walk passes a short one so one huge child (e.g. a package cache with millions
+    /// of files) times out + shows partial instead of stalling the whole scan for minutes.
+    static func scan(_ path: String, timeout: TimeInterval = 300) throws -> DiskScanResult {
         // Prefer the bundled conductor: `burrow analyze --json <path>` runs the bundled engine,
         // so disk analysis works even with NO system `mo` installed (the hard requirement just
         // below). The envelope's `data` is the same analyze-go JSON, so `parse` is unchanged; any
         // conductor miss (not bundled, engine error, empty/garbled) falls through to the direct
         // engine, so behavior is never worse than before.
-        if BurrowConductor.isAvailable, let viaConductor = try? conductorScan(path) {
+        if BurrowConductor.isAvailable, let viaConductor = try? conductorScan(path, timeout: timeout) {
             return viaConductor
         }
         guard case .installed = MoEngine.shared.availability() else {
@@ -92,7 +95,7 @@ enum DiskScanner {
         // few seconds, but a cold cache + large external volume + no
         // indexing can stretch it. Beyond 5 min something's wrong.
         let result = try MoEngine.shared.capture(
-            MoCommand(target: .mo, args: ["analyze", "--json", path], timeout: 300))
+            MoCommand(target: .mo, args: ["analyze", "--json", path], timeout: timeout))
         guard result.exitCode == 0 else {
             if indicatesMissingJSONSupport(stderr: result.stderr) {
                 throw DiskScanError.moTooOld(found: MoleCLI.version())
@@ -108,8 +111,8 @@ enum DiskScanner {
     /// Scan via the bundled conductor (`burrow analyze --json <path>`). Throws on any miss —
     /// not bundled, timeout, an `ok:false` envelope, or no `data` — so `scan` can fall back to
     /// the direct engine. The `data` payload is the same analyze-go JSON, decoded by `parse`.
-    private static func conductorScan(_ path: String) throws -> DiskScanResult {
-        let envelope = try BurrowConductor.capture("analyze", [path], timeout: 300)
+    private static func conductorScan(_ path: String, timeout: TimeInterval) throws -> DiskScanResult {
+        let envelope = try BurrowConductor.capture("analyze", [path], timeout: timeout)
         guard let data = envelope.data else {
             throw DiskScanError.parseFailed("conductor returned an envelope with no data")
         }
