@@ -130,7 +130,9 @@ struct AnalyzeView: View {
                         .font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
                         .lineLimit(1).truncationMode(.middle)
                         .frame(maxWidth: 380)
-                    Text(verbatim: "· \(p.done)/\(p.total)")
+                    // Per-child walk has a real n/total; the streaming scan knows only a running
+                    // file count (unknown total) → show "N files" instead of a misleading "N/N".
+                    Text(verbatim: p.total > 0 ? "· \(p.done)/\(p.total)" : "· \(p.done.formatted()) files")
                         .font(Brand.mono(11)).foregroundStyle(Brand.textTertiary)
                 } else {
                     Text("Measuring…").font(Brand.mono(11)).foregroundStyle(Brand.textSecondary)
@@ -563,6 +565,13 @@ final class AnalyzeModel: ObservableObject {
         proc.standardError = Pipe()   // discard the human-readable line on stderr
         try proc.run()
 
+        // Bound the scan: a pathological tree (Home's package caches — millions of tiny files) can
+        // run for minutes. Terminate after a cap so scanWithProgress falls back to the per-child
+        // walk instead of the reader blocking indefinitely on availableData.
+        let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30, execute: killer)
+        defer { killer.cancel() }
+
         let handle = out.fileHandleForReading
         var pending = Data()
         var resultData: Data?
@@ -578,7 +587,7 @@ final class AnalyzeModel: ObservableObject {
                       let event = AnalyzeProgressEvent.parse(line: line) else { continue }
                 switch event {
                 case .progress(let files, _, _, let scanned):
-                    onProgress(scanned, files, max(files, 1))   // path + running file count
+                    onProgress(scanned, files, 0)   // total 0 → display shows "N files" (unknown total)
                 case .result(let data):
                     resultData = data
                 }
@@ -651,7 +660,9 @@ final class AnalyzeModel: ObservableObject {
                     if isDir.boolValue {
                         // A child mole can't read (permissions) still gets a row
                         // — size 0 — instead of sinking the whole scan.
-                        let result = try? DiskScanner.scan(childPath)
+                        // Short per-child timeout: one huge child (a package cache with millions
+                        // of files) times out + shows partial instead of stalling the whole walk.
+                        let result = try? DiskScanner.scan(childPath, timeout: 20)
                         let size = result.map { $0.totalSize > 0 ? $0.totalSize : $0.entries.reduce(0) { $0 + $1.size } } ?? 0
                         if let result { cacheChild(childPath, result) }
                         entry = DiskScanEntry(id: childPath, name: name, path: childPath,
