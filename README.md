@@ -6,8 +6,17 @@
 >
 > If you like Mole and want to fund `mo`'s development — **buy mole.fit ($19)**.
 
-# Burrow
 
+<div align="center">
+  <h1>Burrow</h1>
+  <p><em>🐹 Clean, uninstall, analyze, optimize, and monitor your Mac.</em></p>
+</div>
+
+<!-- <p align="center">
+  <a href="https://github.com/caezium/burrow/stargazers"><img src="https://img.shields.io/github/stars/caezium/burrow/?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/caezium/burrow//releases"><img src="https://img.shields.io/github/v/tag/caezium/burrow/?label=version&style=flat-square" alt="Version"></a>
+  <a href="https://github.com/caezium/burrow/commits"><img src="https://img.shields.io/github/commit-activity/m/caezium/burrow/?style=flat-square" alt="Commits"></a>
+</p> -->
 **A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Clean, uninstall, optimize, analyze disk, and watch live system status, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
