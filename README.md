@@ -17,7 +17,7 @@
   <a href="https://github.com/caezium/burrow//releases"><img src="https://img.shields.io/github/v/tag/caezium/burrow/?label=version&style=flat-square" alt="Version"></a>
   <a href="https://github.com/caezium/burrow/commits"><img src="https://img.shields.io/github/commit-activity/m/caezium/burrow/?style=flat-square" alt="Commits"></a>
 </p> -->
-**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Clean, uninstall, optimize, analyze disk, and watch live system status, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
+**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Cleanup, app management, maintenance, disk analysis, and live status in one native Mac app, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
 ![Windows 10/11 — beta](https://img.shields.io/badge/Windows-10%2F11%20·%20beta-blue)
