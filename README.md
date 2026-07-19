@@ -6,22 +6,26 @@
 >
 > If you like Mole and want to fund `mo`'s development — **buy mole.fit ($19)**.
 
-
 <div align="center">
   <h1>Burrow</h1>
-  <p><em>🐹 Clean, uninstall, analyze, optimize, and monitor your Mac.</em></p>
+  <p><em>🐹 The open-source system companion for your Mac — clean, uninstall, analyze, optimize, and monitor, built for you and your AI agents.</em></p>
 </div>
 
-<!-- <p align="center">
-  <a href="https://github.com/caezium/burrow/stargazers"><img src="https://img.shields.io/github/stars/caezium/burrow/?style=flat-square" alt="Stars"></a>
-  <a href="https://github.com/caezium/burrow//releases"><img src="https://img.shields.io/github/v/tag/caezium/burrow/?label=version&style=flat-square" alt="Version"></a>
-  <a href="https://github.com/caezium/burrow/commits"><img src="https://img.shields.io/github/commit-activity/m/caezium/burrow/?style=flat-square" alt="Commits"></a>
-</p> -->
-**A free, open-source GUI for the [Mole](https://github.com/tw93/Mole) (`mo`) engine — now bundled in the app, so there's nothing else to install. Cleanup, app management, maintenance, disk analysis, and live status in one native Mac app, plus long-range history and local MCP access for AI agents. Native on macOS, with a Windows preview implemented under [`windows/`](windows/).**
+<p align="center">
+  <a href="https://github.com/caezium/Burrow/stargazers"><img src="https://img.shields.io/github/stars/caezium/Burrow?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/caezium/Burrow/releases"><img src="https://img.shields.io/github/v/tag/caezium/Burrow?label=version&style=flat-square" alt="Version"></a>
+  <a href="https://github.com/caezium/Burrow/releases"><img src="https://img.shields.io/github/downloads/caezium/Burrow/total?style=flat-square&label=downloads" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?style=flat-square" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Windows-10%2F11%20beta-blue?style=flat-square" alt="Windows beta">
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT">
+</p>
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
-![Windows 10/11 — beta](https://img.shields.io/badge/Windows-10%2F11%20·%20beta-blue)
-![License: MIT](https://img.shields.io/badge/License-MIT-blue)
+<p align="center">
+  <a href="https://trendshift.io/repositories/47076" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/47076/daily?language=Swift" alt="caezium/Burrow on Trendshift" width="250" height="55"/></a>
+    <a href="https://trendshift.io/repositories/47076?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-47076" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/47076/weekly?language=Swift" alt="caezium%2FBurrow | Trendshift" width="250" height="55"/></a>
+</p>
+
+**Burrow puts everything your Mac needs in one free, native app: junk cleanup, dev-artifact purge, app uninstall with leftover removal, duplicate finding, safe maintenance, disk maps, and live system status — powered by a bundled, audited open-source engine ([burrow-engine](https://github.com/caezium/burrow-engine), a fork of [Mole](https://github.com/tw93/Mole)'s `mo`), so there's nothing else to install. And it does what no other cleaner does: it keeps months of local metric history and runs a built-in MCP server, so AI agents like Claude Code, Codex, and Cursor can watch, query, and care for your Mac — every action consent-gated, audited, and reversible. Native on macOS, with a Windows preview under [`windows/`](windows/).**
 
 
 Mac:
